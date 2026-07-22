@@ -6011,6 +6011,40 @@
         },
         "disable_live_parent_wake_routing": {
           "type": "boolean"
+        },
+        "task_dag": {
+          "type": "boolean"
+        },
+        "mcp_deferred_loading": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "semantic_url": {
+                  "type": "string"
+                },
+                "always_load": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "stub_description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "enabled"
+              ],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "additionalProperties": false
