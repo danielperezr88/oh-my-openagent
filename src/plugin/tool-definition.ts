@@ -8,9 +8,7 @@ export function createToolDefinitionHandler(args: {
 ) => Promise<void> {
   const { hooks } = args
   return async (input, output) => {
-    const overrideHook = hooks.todoDescriptionOverride
-    if (overrideHook) {
-      await overrideHook["tool.definition"](input, output)
-    }
+    await hooks.todoDescriptionOverride?.["tool.definition"]?.(input, output)
+    await hooks.mcpDeferredLoader?.["tool.definition"]?.(input, output)
   }
 }

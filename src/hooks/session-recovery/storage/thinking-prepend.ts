@@ -13,12 +13,26 @@ type StoredSignedThinkingPart = StoredPart & {
   type: "thinking" | "redacted_thinking"
   signature: string
 }
+/** Unsigned thinking part — DeepSeek V4 Pro via Anthropic-compatible API (no signature). */
+type StoredUnsignedThinkingPart = StoredPart & {
+  type: "thinking"
+}
+/** Any thinking part the recovery layer can work with — signed or unsigned. */
+type StoredValidThinkingPart = StoredSignedThinkingPart | StoredUnsignedThinkingPart
+
 type SDKMessagePart = NonNullable<MessageData["parts"]>[number]
 type SDKSignedThinkingPart = SDKMessagePart & {
   id: string
   type: "thinking" | "redacted_thinking"
   signature: string
 }
+/** Unsigned SDK thinking part — DeepSeek V4 Pro via Anthropic-compatible API (no signature). */
+type SDKUnsignedThinkingPart = SDKMessagePart & {
+  id: string
+  type: "thinking"
+}
+/** Any SDK thinking part the recovery layer can work with — signed or unsigned. */
+type SDKValidThinkingPart = SDKSignedThinkingPart | SDKUnsignedThinkingPart
 
 type ThinkingPrependDeps = {
   isSqliteBackend: typeof isSqliteBackend
@@ -85,6 +99,17 @@ function isStoredSignedThinkingPart(part: StoredPart): part is StoredSignedThink
   return typeof signature === "string" && signature.length > 0
 }
 
+function isStoredUnsignedThinkingPart(part: StoredPart): part is StoredUnsignedThinkingPart {
+  if (part.type !== "thinking") return false
+
+  const signature = Reflect.get(part, "signature")
+  return !signature || (typeof signature === "string" && signature.length === 0)
+}
+
+function isStoredValidThinkingPart(part: StoredPart): part is StoredValidThinkingPart {
+  return isStoredSignedThinkingPart(part) || isStoredUnsignedThinkingPart(part)
+}
+
 function isSDKSignedThinkingPart(part: SDKMessagePart): part is SDKSignedThinkingPart {
   if (!part.type || !THINKING_TYPES.has(part.type)) {
     return false
@@ -99,14 +124,26 @@ function isSDKSignedThinkingPart(part: SDKMessagePart): part is SDKSignedThinkin
     && ((part as { signature?: string }).signature?.length ?? 0) > 0
 }
 
-function toPatchBody(part: SDKSignedThinkingPart): Record<string, unknown> {
+function isSDKUnsignedThinkingPart(part: SDKMessagePart): part is SDKUnsignedThinkingPart {
+  if (part.type !== "thinking") return false
+  if (typeof part.id !== "string") return false
+
+  const sig = (part as { signature?: unknown }).signature
+  return !sig || (typeof sig === "string" && sig.length === 0)
+}
+
+function isSDKValidThinkingPart(part: SDKMessagePart): part is SDKValidThinkingPart {
+  return isSDKSignedThinkingPart(part) || isSDKUnsignedThinkingPart(part)
+}
+
+function toPatchBody(part: SDKValidThinkingPart): Record<string, unknown> {
   return { ...part }
 }
 
 function findLastThinkingPart(
   sessionID: string,
   beforeMessageID: string
-): StoredSignedThinkingPart | null {
+): StoredValidThinkingPart | null {
   const messages = readMessages(sessionID)
 
   const currentIndex = messages.findIndex((message) => message.id === beforeMessageID)
@@ -118,7 +155,7 @@ function findLastThinkingPart(
 
     const parts = readParts(message.id)
     for (const part of parts) {
-      if (isStoredSignedThinkingPart(part)) {
+      if (isStoredValidThinkingPart(part)) {
         return part
       }
     }
@@ -167,7 +204,7 @@ async function findLastThinkingPartFromSDK(
   client: OpencodeClient,
   sessionID: string,
   beforeMessageID: string
-): Promise<SDKSignedThinkingPart | null> {
+): Promise<SDKValidThinkingPart | null> {
   try {
     const response = await client.session.messages({ path: { id: sessionID } })
     const messages = normalizeSDKResponse(response, [] as MessageData[], { preferResponseOnMissingData: true })
@@ -181,7 +218,7 @@ async function findLastThinkingPartFromSDK(
       if (!msg.parts) continue
 
       for (const part of msg.parts) {
-        if (isSDKSignedThinkingPart(part)) {
+        if (isSDKValidThinkingPart(part)) {
           return part
         }
       }

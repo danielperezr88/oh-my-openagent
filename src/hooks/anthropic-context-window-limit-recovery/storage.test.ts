@@ -10,6 +10,10 @@ type TruncateToolResult = {
 const findToolResultsBySize = mock<(_: string) => ToolResultInfo[]>(() => [])
 const truncateToolResult = mock<(_: string) => TruncateToolResult>(() => ({ success: false }))
 
+mock.module("../../shared/opencode-storage-detection", () => ({
+  isSqliteBackend: () => false,
+}))
+
 mock.module("./tool-result-storage", () => ({
   countTruncatedResults: () => 0,
   findLargestToolResult: () => null,
@@ -18,9 +22,7 @@ mock.module("./tool-result-storage", () => ({
   truncateToolResult,
 }))
 
-async function importFreshStorage(): Promise<typeof import("./storage")> {
-  return import(`./storage?test=${Date.now()}-${Math.random()}`)
-}
+const { truncateUntilTargetTokens } = await import("./storage")
 
 afterAll(() => {
   mock.restore()
@@ -37,7 +39,6 @@ describe("truncateUntilTargetTokens", () => {
   })
 
   test("truncates only until target is reached", async () => {
-    const { truncateUntilTargetTokens } = await importFreshStorage()
 
     // given: Two tool results, each 1000 chars. Target reduction is 500 chars.
     const results = [
@@ -65,7 +66,6 @@ describe("truncateUntilTargetTokens", () => {
   })
 
   test("truncates all if target not reached", async () => {
-    const { truncateUntilTargetTokens } = await importFreshStorage()
 
     // given: Two tool results, each 100 chars. Target reduction is 500 chars.
     const results = [

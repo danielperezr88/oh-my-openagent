@@ -6,6 +6,8 @@ import { createHooks } from "../create-hooks"
 import { createManagers } from "../create-managers"
 import { createRuntimeTmuxConfig, isTmuxIntegrationEnabled } from "../create-runtime-tmux-config"
 import { createTools } from "../create-tools"
+import { initLocalEmbedder } from "../features/local-embeddings"
+import { McpDeferredRegistry } from "../hooks/mcp-deferred-loader"
 import { initializeOpenClaw } from "../openclaw"
 import { createPluginInterface } from "../plugin-interface"
 import { loadPluginConfig } from "../plugin-config"
@@ -23,6 +25,9 @@ import { log } from "../shared/logger"
 import { logLegacyPluginStartupWarning } from "../shared/log-legacy-plugin-startup-warning"
 import { migrateLegacyWorkspaceDirectory } from "../shared/legacy-workspace-migration"
 import { injectServerAuthIntoClient } from "../shared/opencode-server-auth"
+import { createPluginPostHog, getPostHogDistinctId } from "../shared/posthog"
+import { initTelemetry } from "../telemetry"
+import { setGlobalToolNames } from "../telemetry/tool-resolution-tracker"
 import { startBackgroundCheck as startTmuxCheck } from "../tools/interactive-bash"
 
 type HooksWithCompactionAutocontinue = Hooks & {
@@ -99,6 +104,18 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
     deps.initI18n(pluginConfig.i18n?.locale ? { locale: pluginConfig.i18n.locale } : undefined)
     deps.setAgentSortOrder(pluginConfig.agent_order)
 
+    const posthog = createPluginPostHog()
+    const distinctId = getPostHogDistinctId()
+    try {
+      posthog.trackActive(distinctId, "plugin_loaded")
+    } catch {
+      // telemetry failure is non-fatal
+    }
+
+    initTelemetry()
+    initLocalEmbedder()
+    const mcpDeferredRegistry = new McpDeferredRegistry()
+
     if (pluginConfig.openclaw) {
       await deps.initializeOpenClaw(pluginConfig.openclaw)
     }
@@ -127,6 +144,17 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
     const isHookEnabled = (hookName: HookName): boolean => !disabledHooks.has(hookName)
     const safeHookEnabled = pluginConfig.experimental?.safe_hook_creation ?? true
 
+    const transcriptArchival = isHookEnabled("transcript-archival")
+      ? (() => {
+          try {
+            const { createTranscriptArchivalHook } = require("../hooks/transcript-archival")
+            return createTranscriptArchivalHook()
+          } catch {
+            return null
+          }
+        })()
+      : null
+
     const firstMessageVariantGate = deps.createFirstMessageVariantGate()
 
     const tmuxConfig = deps.createRuntimeTmuxConfig(pluginConfig)
@@ -145,7 +173,10 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       ctx: input,
       pluginConfig,
       managers,
+      mcpDeferredRegistry,
     })
+
+    setGlobalToolNames(Object.keys(toolsResult.filteredTools))
 
     const hooks = deps.createHooks({
       ctx: input,
@@ -157,6 +188,8 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       safeHookEnabled,
       mergedSkills: toolsResult.mergedSkills,
       availableSkills: toolsResult.availableSkills,
+      mcpDeferredRegistry,
+      client: input.client,
     })
 
     const pluginInterface = deps.createPluginInterface({
@@ -171,7 +204,11 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
     const pluginHooks: HooksWithCompactionAutocontinue = {
       ...pluginInterface,
 
-      "experimental.session.compacting": createSessionCompactingHandler(hooks),
+      "experimental.session.compacting": createSessionCompactingHandler({
+        ...hooks,
+        transcriptArchival,
+        pluginContext: input,
+      }),
 
       "experimental.compaction.autocontinue": createCompactionAutocontinueHandler(hooks),
     }

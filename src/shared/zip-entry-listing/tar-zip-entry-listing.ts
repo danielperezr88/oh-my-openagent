@@ -8,7 +8,7 @@ import { readProcessStream } from "../process-stream-reader"
 
 function parseTarListedZipEntry(line: string): ArchiveEntry | null {
 	const match = line.match(
-		/^([^\s])\S*\s+\d+\s+\S+\s+\S+\s+\d+\s+\w+\s+\d+\s+(?:\d{2}:\d{2}|\d{4})\s+(.*)$/
+		/^([^\s])\S*\s+\d+\s+\S+\s+\S+\s+\d+\s+[\w.]+\s+\d+\s+(?:\d{2}:\d{2}|\d{4})\s+(.*)$/
 	)
 	if (!match) {
 		return null
@@ -78,6 +78,7 @@ export async function listZipEntriesWithTar(
 	const proc = spawn(["tar", "-tvf", archivePath], {
 		stdout: "pipe",
 		stderr: "pipe",
+		env: { ...process.env, LC_ALL: "C" },
 	})
 
 	const [exitCode, stdout, stderr] = await Promise.all([

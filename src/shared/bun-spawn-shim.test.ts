@@ -26,7 +26,8 @@ describe("bun-spawn-shim", () => {
     expect(stdout.trim()).toBe("shim-ok")
   })
 
-  test("#given detached object command #when spawn starts #then process exposes daemon controls", async () => {
+  // detached: true causes Bun.spawn's exited promise to never resolve on Windows
+  test.skipIf(process.platform === "win32")("#given detached object command #when spawn starts #then process exposes daemon controls", async () => {
     const proc = spawn({
       cmd: ["bun", "--print", "'detached-ok'"],
       stdout: "pipe",
@@ -71,7 +72,8 @@ describe("bun-spawn-shim", () => {
     expect(result.pid).toBeGreaterThan(0)
   })
 
-  test("#given default stdio #when child reads stdin #then it does not hang waiting for input", async () => {
+  // cat is unavailable on Windows; test verifies stdin defaults to "ignore" (Unix-only behavior)
+  test.skipIf(process.platform === "win32")("#given default stdio #when child reads stdin #then it does not hang waiting for input", async () => {
     const proc = spawn(["cat"], { stdout: "pipe", stderr: "pipe" })
 
     const exitCode = await proc.exited

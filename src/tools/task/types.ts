@@ -44,6 +44,7 @@ export type TaskCreateInput = z.infer<typeof TaskCreateInputSchema>
 export const TaskListInputSchema = z.object({
   status: TaskStatusSchema.optional(),
   parentID: z.string().optional(),
+  ready: z.boolean().optional(),
 })
 
 export type TaskListInput = z.infer<typeof TaskListInputSchema>

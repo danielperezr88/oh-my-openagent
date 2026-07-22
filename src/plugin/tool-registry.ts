@@ -42,11 +42,18 @@ import {
   createTaskUpdateTool,
   createHashlineEditTool,
 } from "../tools"
+import { createDiscoverToolsTool, extractMcpToolIDs, extractMcpToolDescriptions } from "../tools/discover-tools"
+import { lsp_goto_definition, lsp_find_references, lsp_symbols, lsp_diagnostics, lsp_prepare_rename, lsp_rename } from "../tools/lsp/tools"
+import { createAstGrepTools } from "../tools/ast-grep/tools"
+import { createDocStoreTools } from "../tools/doc-store/tools"
 import { getMainSessionID } from "../features/claude-code-session-state"
+import { createContextualKnowledgeTool, createDetectStackTool, createSecurityScanTool, createSessionCostTool } from "../features/ecc-integration"
+import { createInstinctListTool, createInstinctAddTool, createInstinctExportTool, createInstinctDeleteTool } from "../features/ecc-integration/continuous-learning/create-instinct-tools"
 import { filterDisabledTools } from "../shared/disabled-tools"
 import { isTaskSystemEnabled, log } from "../shared"
 
 import type { Managers } from "../create-managers"
+import type { McpDeferredRegistry } from "../hooks/mcp-deferred-loader"
 import type { SkillContext } from "./skill-context"
 import { normalizeToolArgSchemas } from "./normalize-tool-arg-schemas"
 
@@ -138,13 +145,23 @@ const LOW_PRIORITY_TOOL_ORDER = [
   "grep",
   "skill_mcp",
   "skill",
-  "task",
   "lsp_rename",
   "lsp_prepare_rename",
   "lsp_find_references",
   "lsp_goto_definition",
   "lsp_symbols",
   "lsp_diagnostics",
+  "discover_tools",
+  "doc_store_status",
+  "doc_store_ingest",
+  "doc_store_consolidate_prepare",
+  "doc_store_consolidate_store",
+  "doc_store_consolidate_list",
+  "doc_store_search",
+  "doc_store_query",
+  "doc_store_lint",
+  "doc_store_maintain",
+  "task",
 ] as const
 
 export function trimToolsToCap(filteredTools: ToolsRecord, maxTools: number): void {
@@ -180,6 +197,7 @@ export function createToolRegistry(args: {
   managers: Pick<Managers, "backgroundManager" | "tmuxSessionManager" | "skillMcpManager" | "modelFallbackControllerAccessor">
   skillContext: SkillContext
   availableCategories: AvailableCategory[]
+  mcpDeferredRegistry: McpDeferredRegistry
   interactiveBashEnabled?: boolean
   toolFactories?: Partial<ToolRegistryFactories>
 }): ToolRegistryResult {
@@ -189,6 +207,7 @@ export function createToolRegistry(args: {
     managers,
     skillContext,
     availableCategories,
+    mcpDeferredRegistry,
     interactiveBashEnabled = isInteractiveBashEnabled(),
     toolFactories,
   } = args
@@ -348,6 +367,32 @@ export function createToolRegistry(args: {
     ...teamModeToolsRecord,
     ...taskToolsRecord,
     ...hashlineToolsRecord,
+    // Custom tools: LSP (native, 6 tools)
+    lsp_goto_definition,
+    lsp_find_references,
+    lsp_symbols,
+    lsp_diagnostics,
+    lsp_prepare_rename,
+    lsp_rename,
+    // Custom tools: AST-grep (2 tools)
+    ...createAstGrepTools(ctx),
+    // Custom tools: Doc-store (9 tools)
+    ...createDocStoreTools(),
+    // Custom tool: discover-tools (1 tool)
+    discover_tools: createDiscoverToolsTool({
+      registry: mcpDeferredRegistry,
+      getMcpToolIDs: () => extractMcpToolIDs(allTools),
+      getToolDescriptions: () => extractMcpToolDescriptions(allTools),
+    }),
+    // ECC integration tools
+    contextual_knowledge: createContextualKnowledgeTool(),
+    security_scan: createSecurityScanTool(),
+    detect_stack: createDetectStackTool(),
+    session_cost: createSessionCostTool(),
+    instinct_list: createInstinctListTool(),
+    instinct_add: createInstinctAddTool(),
+    instinct_export: createInstinctExportTool(),
+    instinct_delete: createInstinctDeleteTool(),
   }
 
   const allToolNames = Object.keys(allTools)

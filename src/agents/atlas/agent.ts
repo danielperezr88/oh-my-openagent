@@ -21,6 +21,7 @@ import {
 import type { AgentMode, AgentPromptMetadata } from "../types"
 import type { AvailableAgent, AvailableSkill, AvailableCategory } from "../dynamic-agent-prompt-builder"
 import { buildAgentIdentitySection, buildCategorySkillsDelegationGuide } from "../dynamic-agent-prompt-builder"
+import { buildDocStoreAwarenessWithActions } from "../dynamic-agent-doc-store-section"
 import type { CategoryConfig } from "../../config/schema"
 import { mergeCategories } from "../../shared/merge-categories"
 
@@ -111,7 +112,7 @@ function buildDynamicOrchestratorPrompt(ctx?: OrchestratorContext): string {
     inject: runtimeInjections,
   }).body
 
-  return agentIdentity + "\n" + basePrompt
+  return agentIdentity + "\n" + basePrompt + "\n\n" + buildDocStoreAwarenessWithActions()
 }
 
 export function createAtlasAgent(ctx: OrchestratorContext): AgentConfig {

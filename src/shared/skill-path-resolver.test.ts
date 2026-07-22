@@ -1,6 +1,11 @@
 import { describe, it, expect } from "bun:test"
 import { resolveSkillPathReferences } from "./skill-path-resolver"
 
+/** Normalize path separators and strip Windows drive prefixes for cross-platform assertions */
+function normalizePath(p: string): string {
+	return p.replace(/\\/g, "/").replace(/[A-Za-z]:(?=\/)/g, "")
+}
+
 describe("resolveSkillPathReferences", () => {
 	it("resolves @path references containing a slash to absolute paths", () => {
 		//#given
@@ -11,7 +16,7 @@ describe("resolveSkillPathReferences", () => {
 		const result = resolveSkillPathReferences(content, basePath)
 
 		//#then
-		expect(result).toBe(
+		expect(normalizePath(result)).toBe(
 			"Run `python3 /home/user/.config/opencode/skills/frontend-ui-ux/scripts/search.py` to search"
 		)
 	})
@@ -25,7 +30,7 @@ describe("resolveSkillPathReferences", () => {
 		const result = resolveSkillPathReferences(content, basePath)
 
 		//#then
-		expect(result).toBe(
+		expect(normalizePath(result)).toBe(
 			"Script: /skills/frontend/scripts/search.py\nData: /skills/frontend/data/styles.csv"
 		)
 	})
@@ -39,7 +44,7 @@ describe("resolveSkillPathReferences", () => {
 		const result = resolveSkillPathReferences(content, basePath)
 
 		//#then
-		expect(result).toBe("Data files: /skills/frontend/data/")
+		expect(normalizePath(result)).toBe("Data files: /skills/frontend/data/")
 	})
 
 	it("does not resolve single-segment @references without slash", () => {
@@ -75,7 +80,7 @@ describe("resolveSkillPathReferences", () => {
 		const result = resolveSkillPathReferences(content, basePath)
 
 		//#then
-		expect(result).toBe("/skills/frontend/data/stacks/html-tailwind.csv")
+		expect(normalizePath(result)).toBe("/skills/frontend/data/stacks/html-tailwind.csv")
 	})
 
 	it("returns content unchanged when no @path references exist", () => {
@@ -123,7 +128,7 @@ describe("resolveSkillPathReferences", () => {
 		const result = resolveSkillPathReferences(content, basePath)
 
 		//#then
-		expect(result).toBe("/skills/frontend/scripts/search.py")
+		expect(normalizePath(result)).toBe("/skills/frontend/scripts/search.py")
 	})
 
 	it("does not resolve traversal paths that escape the base directory", () => {

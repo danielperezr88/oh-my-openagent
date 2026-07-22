@@ -247,6 +247,7 @@ export function createChatMessageHandler(args: {
     await hooks.autoSlashCommand?.["chat.message"]?.(input, output)
     await hooks.noSisyphusGpt?.["chat.message"]?.(input, output)
     await hooks.noHephaestusNonGpt?.["chat.message"]?.(input, output)
+    await (hooks.envInjector?.["chat.message"] as ((input: { sessionID?: string }) => void) | undefined)?.({ sessionID: input.sessionID })
     if (hooks.startWork && isStartWorkHookOutput(output)) {
       const promptText = extractPromptText(output.parts)
       if (isStartWorkFallbackTemplate(promptText)) {

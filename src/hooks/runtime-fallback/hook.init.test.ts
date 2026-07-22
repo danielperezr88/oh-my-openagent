@@ -21,27 +21,27 @@ const createEventHandlerMock = mock(() => async () => {})
 const createMessageUpdateHandlerMock = mock(() => async () => {})
 const createChatMessageHandlerMock = mock(() => async () => {})
 
-function registerModuleMocks(): void {
-  mock.module("../../plugin-config", () => ({
-    loadPluginConfig: loadPluginConfigMock,
-  }))
+mock.module("../../plugin-config", () => ({
+  loadPluginConfig: loadPluginConfigMock,
+}))
 
-  mock.module("./auto-retry", () => ({
-    createAutoRetryHelpers: createAutoRetryHelpersMock,
-  }))
+mock.module("./auto-retry", () => ({
+  createAutoRetryHelpers: createAutoRetryHelpersMock,
+}))
 
-  mock.module("./event-handler", () => ({
-    createEventHandler: createEventHandlerMock,
-  }))
+mock.module("./event-handler", () => ({
+  createEventHandler: createEventHandlerMock,
+}))
 
-  mock.module("./message-update-handler", () => ({
-    createMessageUpdateHandler: createMessageUpdateHandlerMock,
-  }))
+mock.module("./message-update-handler", () => ({
+  createMessageUpdateHandler: createMessageUpdateHandlerMock,
+}))
 
-  mock.module("./chat-message-handler", () => ({
-    createChatMessageHandler: createChatMessageHandlerMock,
-  }))
-}
+mock.module("./chat-message-handler", () => ({
+  createChatMessageHandler: createChatMessageHandlerMock,
+}))
+
+const { createRuntimeFallbackHook } = await import("./hook")
 
 function createMockContext(): RuntimeFallbackPluginInput {
   return {
@@ -68,11 +68,8 @@ function createMockInterval(): RuntimeFallbackInterval {
 describe("createRuntimeFallbackHook initialization", () => {
   const originalSetInterval = globalThis.setInterval
   let setIntervalCalls = 0
-  let createRuntimeFallbackHook: RuntimeFallbackModule["createRuntimeFallbackHook"]
 
-  beforeEach(async () => {
-    mock.restore()
-    registerModuleMocks()
+  beforeEach(() => {
     loadPluginConfigMock.mockClear()
     createAutoRetryHelpersMock.mockClear()
     createEventHandlerMock.mockClear()
@@ -86,15 +83,10 @@ describe("createRuntimeFallbackHook initialization", () => {
       setIntervalCalls += 1
       return createMockInterval() as ReturnType<typeof globalThis.setInterval>
     }) as typeof globalThis.setInterval
-
-    const cacheBuster = `${Date.now()}-${Math.random()}`
-    const runtimeFallbackModule: RuntimeFallbackModule = await import(`./hook?test=${cacheBuster}`)
-    createRuntimeFallbackHook = runtimeFallbackModule.createRuntimeFallbackHook
   })
 
   afterEach(() => {
     globalThis.setInterval = originalSetInterval
-    mock.restore()
   })
 
   test("#given injected pluginConfig #when the hook factory runs #then loadPluginConfig is not called", () => {

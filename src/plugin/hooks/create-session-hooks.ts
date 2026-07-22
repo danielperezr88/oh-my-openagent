@@ -30,6 +30,11 @@ import {
   createLegacyPluginToastHook,
 } from "../../hooks"
 import { createAnthropicEffortHook } from "../../hooks/anthropic-effort"
+import { createCheckpointUndoHook } from "../../hooks/checkpoint-undo"
+import { createTodoNagHook } from "../../hooks/todo-nag"
+import { createPathScopedRulesHook } from "../../hooks/path-scoped-rules"
+import { createEnvInjectorHook } from "../../features/ecc-integration/env-injector"
+import { createConsolidationHook } from "../../features/ecc-integration/continuous-learning/consolidation/consolidation-hook"
 import {
   detectExternalNotificationPlugin,
   getNotificationConflictWarning,
@@ -65,6 +70,12 @@ export type SessionHooks = {
   anthropicEffort: ReturnType<typeof createAnthropicEffortHook> | null
   runtimeFallback: ReturnType<typeof createRuntimeFallbackHook> | null
   legacyPluginToast: ReturnType<typeof createLegacyPluginToastHook> | null
+  // Custom session hooks
+  checkpointUndo: ReturnType<typeof createCheckpointUndoHook> | null
+  todoNag: ReturnType<typeof createTodoNagHook> | null
+  pathScopedRules: ReturnType<typeof createPathScopedRulesHook> | null
+  envInjector: ReturnType<typeof createEnvInjectorHook> | null
+  continuousLearningConsolidate: ReturnType<typeof createConsolidationHook> | null
 }
 
 export function createSessionHooks(args: {
@@ -276,6 +287,27 @@ export function createSessionHooks(args: {
     ? safeHook("legacy-plugin-toast", () => createLegacyPluginToastHook(ctx))
     : null
 
+  // Custom session hooks
+  const checkpointUndo = isHookEnabled("checkpoint-undo")
+    ? safeHook("checkpoint-undo", () => createCheckpointUndoHook({ directory: ctx.directory }))
+    : null
+
+  const todoNag = isHookEnabled("todo-nag")
+    ? safeHook("todo-nag", () => createTodoNagHook())
+    : null
+
+  const pathScopedRules = isHookEnabled("path-scoped-rules")
+    ? safeHook("path-scoped-rules", () => createPathScopedRulesHook({ directory: ctx.directory }))
+    : null
+
+  const envInjector = isHookEnabled("env-injector")
+    ? safeHook("env-injector", () => createEnvInjectorHook(ctx))
+    : null
+
+  const continuousLearningConsolidate = isHookEnabled("continuous-learning-consolidate")
+    ? safeHook("continuous-learning-consolidate", () => createConsolidationHook())
+    : null
+
   return {
     contextWindowMonitor,
     preemptiveCompaction,
@@ -301,5 +333,10 @@ export function createSessionHooks(args: {
     anthropicEffort,
     runtimeFallback,
     legacyPluginToast,
+    checkpointUndo,
+    todoNag,
+    pathScopedRules,
+    envInjector,
+    continuousLearningConsolidate,
   }
 }

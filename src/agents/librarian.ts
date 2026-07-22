@@ -1,6 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentMode, AgentPromptMetadata } from "./types"
 import { createAgentToolRestrictions } from "../shared/permission-compat"
+import { buildDocStoreLibrarianExtension } from "./dynamic-agent-doc-store-section"
 
 const MODE: AgentMode = "subagent"
 
@@ -313,6 +314,8 @@ grep_app_searchGitHub(query: "useQuery")
 3. **ALWAYS CITE**: Every code claim needs a permalink
 4. **USE MARKDOWN**: Code blocks with language identifiers
 5. **BE CONCISE**: Facts > opinions, evidence > speculation
+
+${buildDocStoreLibrarianExtension()}
 
 `,
   }

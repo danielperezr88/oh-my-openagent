@@ -80,3 +80,9 @@ export function stopToolInputCacheCleanup(): void {
   clearInterval(cleanupInterval)
   cleanupInterval = null
 }
+
+/** Reset module state for test isolation. Does not clearInterval — just resets bookkeeping. */
+export function _testReset(): void {
+  cache.clear()
+  cleanupInterval = null
+}

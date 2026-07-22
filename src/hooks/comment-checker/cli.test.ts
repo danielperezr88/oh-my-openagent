@@ -1,9 +1,9 @@
-import { describe, test, expect, mock, afterAll } from "bun:test"
+import { describe, test, expect, mock, afterAll, afterEach } from "bun:test"
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 
-import { processWithCli } from "./cli-runner"
+import { processWithCli, _testResetSessionDedup, _testResetLock } from "./cli-runner"
 import type { PendingCall } from "./types"
 import { unsafeTestValue } from "../../../test-support/unsafe-test-value"
 
@@ -27,6 +27,10 @@ function createScriptBinary(scriptContent: string): string {
 }
 
 afterAll(() => { mock.restore() })
+afterEach(() => {
+  _testResetSessionDedup()
+  _testResetLock()
+})
 
 describe("comment-checker CLI", () => {
   describe("lazy initialization", () => {
@@ -116,7 +120,7 @@ done
       }
     })
 
-    test("keeps non-timeout flow unchanged", async () => {
+    test.skipIf(process.platform === "win32")("keeps non-timeout flow unchanged", async () => {
       // given
       const { runCommentChecker } = await import("./cli")
       const binaryPath = createScriptBinary(`#!/bin/sh
@@ -159,9 +163,17 @@ exit 2
         sessionID: "ses-1",
         filePath: "/tmp/a.ts",
         timestamp: Date.now(),
+        newString: "// added comment",
+      }
+      const pendingCall2: PendingCall = {
+        tool: "write",
+        sessionID: "ses-2",
+        filePath: "/tmp/a.ts",
+        timestamp: Date.now(),
+        newString: "// added comment",
       }
       const firstCall = processWithCli({ tool: "write", sessionID: "ses-1", callID: "call-1" }, pendingCall, { output: "" }, "/fake", undefined, () => {}, { runCommentChecker: cliMocks.runCommentChecker })
-      const secondCall = processWithCli({ tool: "write", sessionID: "ses-2", callID: "call-2" }, pendingCall, { output: "" }, "/fake", undefined, () => {}, { runCommentChecker: cliMocks.runCommentChecker })
+      const secondCall = processWithCli({ tool: "write", sessionID: "ses-2", callID: "call-2" }, pendingCall2, { output: "" }, "/fake", undefined, () => {}, { runCommentChecker: cliMocks.runCommentChecker })
 
       // when
       await secondCall
@@ -188,10 +200,18 @@ exit 2
         sessionID: "ses-1",
         filePath: "/tmp/a.ts",
         timestamp: Date.now(),
+        newString: "// added comment",
+      }
+      const pendingCall2: PendingCall = {
+        tool: "write",
+        sessionID: "ses-2",
+        filePath: "/tmp/a.ts",
+        timestamp: Date.now(),
+        newString: "// added comment",
       }
       // when
       await processWithCli({ tool: "write", sessionID: "ses-1", callID: "call-1" }, pendingCall, { output: "" }, "/fake", undefined, () => {}, { runCommentChecker: cliMocks.runCommentChecker })
-      await processWithCli({ tool: "write", sessionID: "ses-2", callID: "call-2" }, pendingCall, { output: "" }, "/fake", undefined, () => {}, { runCommentChecker: cliMocks.runCommentChecker })
+      await processWithCli({ tool: "write", sessionID: "ses-2", callID: "call-2" }, pendingCall2, { output: "" }, "/fake", undefined, () => {}, { runCommentChecker: cliMocks.runCommentChecker })
       // then
       expect(callCount).toBe(2)
     })

@@ -28,9 +28,16 @@ export function stopPendingCallCleanup(): void {
   pendingCalls.clear()
   if (cleanupInterval) {
     clearInterval(cleanupInterval)
-    cleanupInterval = undefined
   }
   cleanupIntervalStarted = false
+  cleanupInterval = undefined
+}
+
+/** Reset module state for test isolation. Does not clearInterval — just resets bookkeeping. */
+export function _testReset(): void {
+  pendingCalls.clear()
+  cleanupIntervalStarted = false
+  cleanupInterval = undefined
 }
 
 export function registerPendingCall(callID: string, pendingCall: PendingCall): void {

@@ -170,8 +170,17 @@ describe("findPluginEntry", () => {
     // #given unrelated plugin entry is configured
     fs.writeFileSync(configPath, JSON.stringify({ plugin: ["some-other-plugin"] }))
 
-    // #when plugin entry is detected
-    const execution = runFindPluginEntry(temporaryDirectory)
+    // #when plugin entry is detected (isolated from user's global config)
+    // On Windows, getConfigPaths also checks %APPDATA% and ~/.config/opencode/,
+    // so we override APPDATA and USERPROFILE to prevent reading the user's real config.
+    const isolatedDir = path.join(temporaryDirectory, "isolated-config")
+    fs.mkdirSync(isolatedDir, { recursive: true })
+    const execution = runFindPluginEntry(temporaryDirectory, {
+      OPENCODE_CONFIG_DIR: isolatedDir,
+      APPDATA: isolatedDir,
+      USERPROFILE: temporaryDirectory,
+      HOME: temporaryDirectory,
+    })
 
     // #then no matching entry is returned
     expect(execution.status).toBe(0)
@@ -197,7 +206,7 @@ describe("findPluginEntry", () => {
     expect(execution.status).toBe(0)
     const pluginInfo = JSON.parse(execution.stdout.trim()) as PluginEntryResult
     expect(pluginInfo).not.toBeNull()
-    expect(pluginInfo?.configPath).toEndWith("/profiles/today/opencode.json")
+    expect(pluginInfo?.configPath).toEndWith(path.join("profiles", "today", "opencode.json"))
     expect(pluginInfo?.pinnedVersion).toBe("beta")
   })
 })

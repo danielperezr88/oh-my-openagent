@@ -3,6 +3,7 @@ import type { HookName, OhMyOpenCodeConfig } from "./config"
 import type { LoadedSkill } from "./features/opencode-skill-loader/types"
 import type { BackgroundManager } from "./features/background-agent"
 import type { ModelFallbackControllerAccessor } from "./hooks/model-fallback"
+import type { McpDeferredRegistry } from "./hooks/mcp-deferred-loader"
 import type { PluginContext } from "./plugin/types"
 import type { ModelCacheState } from "./plugin-state"
 
@@ -42,6 +43,8 @@ export function createHooks(args: {
   safeHookEnabled: boolean
   mergedSkills: LoadedSkill[]
   availableSkills: AvailableSkill[]
+  mcpDeferredRegistry?: McpDeferredRegistry
+  client?: PluginContext["client"]
 }) {
   const {
     ctx,
@@ -53,6 +56,8 @@ export function createHooks(args: {
     safeHookEnabled,
     mergedSkills,
     availableSkills,
+    mcpDeferredRegistry,
+    client,
   } = args
 
   const core = createCoreHooks({
@@ -63,6 +68,8 @@ export function createHooks(args: {
     modelFallbackControllerAccessor,
     isHookEnabled,
     safeHookEnabled,
+    mcpDeferredRegistry,
+    client,
   })
 
   const continuation = createContinuationHooks({

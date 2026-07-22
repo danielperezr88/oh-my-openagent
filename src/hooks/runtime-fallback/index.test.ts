@@ -16,37 +16,31 @@ import type { RuntimeFallbackPluginInput } from "./types"
 
 type RuntimeFallbackModule = typeof import("./hook")
 
-describe("runtime-fallback", () => {
-  let logCalls: Array<{ msg: string; data?: unknown }>
-  let toastCalls: Array<{ title: string; message: string; variant: string }>
-  let createRuntimeFallbackHook: RuntimeFallbackModule["createRuntimeFallbackHook"]
+let logCalls: Array<{ msg: string; data?: unknown }> = []
+let toastCalls: Array<{ title: string; message: string; variant: string }> = []
 
-  beforeEach(async () => {
-    mock.restore()
+mock.module("../../shared/logger", () => ({
+  ...loggerModule,
+  log: (msg: string, data?: unknown) => {
+    logCalls.push({ msg, data })
+  },
+}))
+
+const { createRuntimeFallbackHook }: RuntimeFallbackModule = await import("./hook")
+
+describe("runtime-fallback", () => {
+  beforeEach(() => {
     logCalls = []
     toastCalls = []
     SessionCategoryRegistry.clear()
     clearAllDelegatedChildSessionBootstrap()
     releaseAllPromptAsyncReservationsForTesting()
-
-    const cacheBuster = `${Date.now()}-${Math.random()}`
-
-    mock.module("../../shared/logger", () => ({
-      ...loggerModule,
-      log: (msg: string, data?: unknown) => {
-        logCalls.push({ msg, data })
-      },
-    }))
-
-    const runtimeFallbackModule: RuntimeFallbackModule = await import(`./hook?test=${cacheBuster}`)
-    createRuntimeFallbackHook = runtimeFallbackModule.createRuntimeFallbackHook
   })
 
   afterEach(() => {
     SessionCategoryRegistry.clear()
     clearAllDelegatedChildSessionBootstrap()
     releaseAllPromptAsyncReservationsForTesting()
-    mock.restore()
   })
 
   function createMockPluginInput(overrides?: {

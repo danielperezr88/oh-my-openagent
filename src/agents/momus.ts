@@ -2,6 +2,7 @@ import type { AgentConfig } from "@opencode-ai/sdk";
 import type { AgentMode, AgentPromptMetadata } from "./types";
 import { isGpt5_2Model, isGptModel } from "./types";
 import { createAgentToolRestrictions } from "../shared/permission-compat";
+import { buildDocStoreAwarenessBrief } from "./dynamic-agent-doc-store-section";
 
 const MODE: AgentMode = "subagent";
 
@@ -196,6 +197,8 @@ If REJECT:
 **Your job is to UNBLOCK work, not to BLOCK it with perfectionism.**
 
 **Response Language**: Match the language of the plan content.
+
+${buildDocStoreAwarenessBrief()}
 `;
 
 /**
@@ -277,7 +280,9 @@ If REJECT - **Blocking Issues** (max 3): numbered list, each with specific issue
 Approve by default. Max 3 issues. Be specific - "Task X needs Y" not "needs more clarity". No design opinions. Trust developers. Your job is to unblock work, not block it with perfectionism.
 
 Response language: match the language of the plan content.
-</final_rules>`;
+</final_rules>
+
+${buildDocStoreAwarenessBrief()}`;
 
 /**
  * GPT-5.2 Optimized Momus System Prompt
@@ -371,7 +376,9 @@ Do not rephrase the plan content unless rephrasing changes semantics.
 Approve by default. Max 3 issues. Be specific - "Task X needs Y" not "needs more clarity". No design opinions. Trust developers. Your job is to unblock work, not block it with perfectionism.
 
 Response language: match the language of the plan content.
-</final_rules>`;
+</final_rules>
+
+${buildDocStoreAwarenessBrief()}`;
 
 export { MOMUS_DEFAULT_PROMPT as MOMUS_SYSTEM_PROMPT };
 

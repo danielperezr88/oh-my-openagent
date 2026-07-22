@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, test } from "bun:test";
 import {
   existsSync,
   mkdirSync,
@@ -92,7 +92,8 @@ describe("findRuleFiles with scan cache", () => {
     ].sort());
   });
 
-  it("does not re-resolve symlinked rule path on cache hit", async () => {
+  // Windows requires Developer Mode or admin privileges to create symlinks
+test.skipIf(process.platform === "win32")("does not re-resolve symlinked rule path on cache hit", async () => {
     // given
     const { createRuleScanCache } = await import(`./rule-scan-cache${createImportSuffix()}`);
     const { findRuleFiles } = await import(`./rule-file-finder${createImportSuffix()}`);

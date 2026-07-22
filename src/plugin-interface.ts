@@ -1,7 +1,7 @@
 import type { PluginContext, PluginInterface, ToolsRecord } from "./plugin/types"
 import type { OhMyOpenCodeConfig } from "./config"
 
-import { createChatParamsHandler } from "./plugin/chat-params"
+import { createChatParamsHandler, type ChatParamsHookInput, type ChatParamsOutput } from "./plugin/chat-params"
 import { createChatHeadersHandler } from "./plugin/chat-headers"
 import { createChatMessageHandler } from "./plugin/chat-message"
 import { createCommandExecuteBeforeHandler } from "./plugin/command-execute-before"
@@ -38,6 +38,7 @@ export function createPluginInterface(args: {
     "chat.params": async (input: unknown, output: unknown) => {
       const handler = createChatParamsHandler({
         anthropicEffort: hooks.anthropicEffort,
+        costTracker: hooks.costTracker as { "chat.params"?: (input: ChatParamsHookInput, output: ChatParamsOutput) => Promise<void> } | null,
         client: ctx.client,
       })
       await handler(input, output)

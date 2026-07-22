@@ -1,0 +1,786 @@
+{
+  "generatedAt": "2026-04-21T22:01:05.273Z",
+  "tools": [
+    {
+      "name": "doc_store_status",
+      "description": "Show doc-store vault overview and statistics. Pass a vault name to see detailed stats for that vault, or omit for global status. Returns JSON with vault names, corpus item counts, raw doc counts, relationships, and confidence scores.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": false,
+          "description": "Vault name to inspect. Omit for global overview of all vaults."
+        }
+      ],
+      "cliCommand": "status [vault]",
+      "executionType": "stdout"
+    },
+    {
+      "name": "doc_store_ingest",
+      "description": "Add a document file to a doc-store knowledge vault. The document will be copied into the vault and queued for consolidation. Returns JSON with doc_id, format, size, and word count.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name to ingest into"
+        },
+        {
+          "name": "path",
+          "type": "string",
+          "required": true,
+          "description": "Absolute path to the document file (pdf, md, txt, html)"
+        },
+        {
+          "name": "tags",
+          "type": "string",
+          "required": false,
+          "description": "Comma-separated tags for the document"
+        },
+        {
+          "name": "categories",
+          "type": "string",
+          "required": false,
+          "description": "Comma-separated categories to assign"
+        }
+      ],
+      "cliCommand": "ingest <vault> <path> [--tags] [--categories]",
+      "executionType": "stdout"
+    },
+    {
+      "name": "doc_store_consolidate_prepare",
+      "description": "Phase 1 of agent-driven consolidation: extract a document's text, find related vault items, and return the consolidation context including the expected JSON schema and rules. You MUST then produce a valid JSON object matching the schema and pass it to doc_store_consolidate_store. Returns JSON with job_id, doc_text, categories, related_items, schema, and rules.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name"
+        },
+        {
+          "name": "doc_id",
+          "type": "string",
+          "required": true,
+          "description": "Document ID to prepare for consolidation"
+        }
+      ],
+      "cliCommand": "consolidate-prepare <vault> --doc-id <id>",
+      "executionType": "stdout"
+    },
+    {
+      "name": "doc_store_consolidate_store",
+      "description": "Phase 2 of agent-driven consolidation: store your structured JSON result in the vault. Pass the exact JSON matching the schema returned by doc_store_consolidate_prepare. If validation fails, the error will describe what to fix -- correct the JSON and retry. Returns JSON with status (success/validation_error), items_created, relationships_created.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name"
+        },
+        {
+          "name": "doc_id",
+          "type": "string",
+          "required": true,
+          "description": "Document ID"
+        },
+        {
+          "name": "job_id",
+          "type": "string",
+          "required": true,
+          "description": "Job ID from consolidate-prepare"
+        },
+        {
+          "name": "result_json",
+          "type": "string",
+          "required": true,
+          "description": "Valid JSON consolidation result matching the schema"
+        }
+      ],
+      "cliCommand": "consolidate-store <vault> --doc-id <id> --job-id <id> (stdin JSON)",
+      "executionType": "stdin"
+    },
+    {
+      "name": "doc_store_consolidate_list",
+      "description": "List documents in a vault that are pending consolidation or currently in progress. Use this to discover which documents need consolidation before calling doc_store_consolidate_prepare for each one. Returns JSON with pending_docs and consolidating_docs arrays.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name"
+        }
+      ],
+      "cliCommand": "consolidate-list <vault>",
+      "executionType": "stdout"
+    },
+    {
+      "name": "doc_store_search",
+      "description": "Search a doc-store vault using the multi-stage retrieval pipeline (BM25 + vector search + optional cross-encoder reranking). Returns JSON with matching item IDs, scores, and text snippets.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name to search"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "description": "Search query"
+        },
+        {
+          "name": "top",
+          "type": "string",
+          "required": false,
+          "description": "Number of results to return (default: 5)"
+        }
+      ],
+      "cliCommand": "search <vault> <query> [--top]",
+      "executionType": "stdout"
+    },
+    {
+      "name": "doc_store_query",
+      "description": "Retrieve relevant knowledge items from a vault for a given question. Returns search results with full text and scores. Synthesize your own answer from these sources, citing item IDs in brackets.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name"
+        },
+        {
+          "name": "question",
+          "type": "string",
+          "required": true,
+          "description": "Question to answer from vault knowledge"
+        }
+      ],
+      "cliCommand": "query <vault> <question>",
+      "executionType": "stdout"
+    },
+    {
+      "name": "doc_store_lint",
+      "description": "Health-check a doc-store vault. Detects orphans, broken wikilinks, stale items, unresolved contradictions, and dangling edges. Returns JSON with issue list categorized by severity (error/warning/info).",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name to lint"
+        }
+      ],
+      "cliCommand": "lint <vault>",
+      "executionType": "stdout"
+    },
+    {
+      "name": "doc_store_maintain",
+      "description": "Prune and update a doc-store vault. Applies confidence decay, archives items below threshold, handles superseded items, and compacts relationship edges. Returns JSON with counts of decayed, archived, superseded items and compacted edges.",
+      "args": [
+        {
+          "name": "vault",
+          "type": "string",
+          "required": true,
+          "description": "Vault name to maintain"
+        }
+      ],
+      "cliCommand": "maintain <vault>",
+      "executionType": "stdout"
+    }
+  ],
+  "promptSections": [
+    {
+      "builderName": "buildDocStoreSection",
+      "content": "/* buildDocStoreSection - extraction failed */",
+      "usedBy": [
+        "Sisyphus",
+        "Hephaestus"
+      ]
+    },
+    {
+      "builderName": "buildDocStoreLibrarianExtension",
+      "content": "/* buildDocStoreLibrarianExtension - extraction failed */",
+      "usedBy": [
+        "Librarian"
+      ]
+    },
+    {
+      "builderName": "buildDocStoreAwarenessBrief",
+      "content": "/* buildDocStoreAwarenessBrief - extraction failed */",
+      "usedBy": [
+        "Explore",
+        "Oracle",
+        "Metis",
+        "Momus",
+        "Prometheus"
+      ]
+    },
+    {
+      "builderName": "buildDocStoreAwarenessWithActions",
+      "content": "/* buildDocStoreAwarenessWithActions - extraction failed */",
+      "usedBy": [
+        "Atlas",
+        "Sisyphus-Junior"
+      ]
+    }
+  ],
+  "agents": [
+    {
+      "name": "Sisyphus",
+      "mode": "primary",
+      "awarenessLevel": "full",
+      "awarenessBuilder": "buildDocStoreSection",
+      "tools": [
+        "doc_store_status",
+        "doc_store_search",
+        "doc_store_query",
+        "doc_store_ingest",
+        "doc_store_consolidate_list",
+        "doc_store_consolidate_prepare",
+        "doc_store_consolidate_store"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6",
+        "anthropic/claude-sonnet-4-6",
+        "openai/gpt-5.4",
+        "google/gemini-3.1-pro"
+      ],
+      "delegationTargets": [
+        "Explore",
+        "Librarian",
+        "Oracle",
+        "Metis",
+        "Momus",
+        "Prometheus",
+        "Sisyphus-Junior"
+      ],
+      "promptFile": "src/agents/sisyphus.ts"
+    },
+    {
+      "name": "Atlas",
+      "mode": "primary",
+      "awarenessLevel": "with-actions",
+      "awarenessBuilder": "buildDocStoreAwarenessWithActions",
+      "tools": [
+        "doc_store_search",
+        "doc_store_query",
+        "doc_store_ingest",
+        "doc_store_consolidate_list",
+        "doc_store_consolidate_prepare",
+        "doc_store_consolidate_store"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6",
+        "openai/gpt-5.4",
+        "google/gemini-3.1-pro"
+      ],
+      "delegationTargets": [
+        "Sisyphus-Junior",
+        "Explore",
+        "Librarian",
+        "Oracle",
+        "Metis",
+        "Momus",
+        "Prometheus"
+      ],
+      "promptFile": "src/agents/atlas/shared-prompt.ts"
+    },
+    {
+      "name": "Hephaestus",
+      "mode": "primary",
+      "awarenessLevel": "full",
+      "awarenessBuilder": "buildDocStoreSection",
+      "tools": [
+        "doc_store_status",
+        "doc_store_search",
+        "doc_store_query",
+        "doc_store_ingest",
+        "doc_store_consolidate_list",
+        "doc_store_consolidate_prepare",
+        "doc_store_consolidate_store"
+      ],
+      "models": [
+        "openai/gpt-5.4",
+        "openai/gpt-5.3-codex",
+        "openai/gpt-4o"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/hephaestus/agent.ts"
+    },
+    {
+      "name": "Librarian",
+      "mode": "subagent",
+      "awarenessLevel": "librarian",
+      "awarenessBuilder": "buildDocStoreLibrarianExtension",
+      "tools": [
+        "doc_store_status",
+        "doc_store_search",
+        "doc_store_query",
+        "doc_store_ingest",
+        "doc_store_consolidate_list",
+        "doc_store_consolidate_prepare",
+        "doc_store_consolidate_store",
+        "doc_store_lint",
+        "doc_store_maintain"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/librarian.ts"
+    },
+    {
+      "name": "Explore",
+      "mode": "subagent",
+      "awarenessLevel": "brief",
+      "awarenessBuilder": "buildDocStoreAwarenessBrief",
+      "tools": [
+        "doc_store_search",
+        "doc_store_query"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6",
+        "openai/gpt-5.4"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/explore.ts"
+    },
+    {
+      "name": "Oracle",
+      "mode": "subagent",
+      "awarenessLevel": "brief",
+      "awarenessBuilder": "buildDocStoreAwarenessBrief",
+      "tools": [
+        "doc_store_search",
+        "doc_store_query"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6",
+        "openai/gpt-5.4"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/oracle.ts"
+    },
+    {
+      "name": "Metis",
+      "mode": "subagent",
+      "awarenessLevel": "brief",
+      "awarenessBuilder": "buildDocStoreAwarenessBrief",
+      "tools": [
+        "doc_store_search",
+        "doc_store_query"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/metis.ts"
+    },
+    {
+      "name": "Momus",
+      "mode": "subagent",
+      "awarenessLevel": "brief",
+      "awarenessBuilder": "buildDocStoreAwarenessBrief",
+      "tools": [
+        "doc_store_search",
+        "doc_store_query"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6",
+        "openai/gpt-5.4"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/momus.ts"
+    },
+    {
+      "name": "Prometheus",
+      "mode": "subagent",
+      "awarenessLevel": "brief",
+      "awarenessBuilder": "buildDocStoreAwarenessBrief",
+      "tools": [
+        "doc_store_search",
+        "doc_store_query"
+      ],
+      "models": [
+        "anthropic/claude-opus-4-6",
+        "openai/gpt-5.4",
+        "google/gemini-3.1-pro"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/prometheus/system-prompt.ts"
+    },
+    {
+      "name": "Sisyphus-Junior",
+      "mode": "subagent",
+      "awarenessLevel": "with-actions",
+      "awarenessBuilder": "buildDocStoreAwarenessWithActions",
+      "tools": [
+        "doc_store_search",
+        "doc_store_query",
+        "doc_store_ingest",
+        "doc_store_consolidate_list",
+        "doc_store_consolidate_prepare",
+        "doc_store_consolidate_store"
+      ],
+      "models": [
+        "anthropic/claude-sonnet-4-6"
+      ],
+      "delegationTargets": [],
+      "promptFile": "src/agents/sisyphus-junior/agent.ts"
+    }
+  ],
+  "stateMachines": [
+    {
+      "name": "Consolidation Pipeline",
+      "description": "The 2-phase agent-driven consolidation flow. Doc-store provides context and schema; the LLM agent performs extraction, reasoning, and structuring.",
+      "states": [
+        {
+          "id": "pending",
+          "label": "PENDING",
+          "description": "Document has been ingested and is waiting for consolidation."
+        },
+        {
+          "id": "discovered",
+          "label": "DISCOVERED",
+          "description": "Agent ran consolidate_list and found the pending document."
+        },
+        {
+          "id": "preparing",
+          "label": "PREPARING",
+          "description": "Agent called consolidate_prepare. Doc-store extracts text and returns schema."
+        },
+        {
+          "id": "awaiting_agent",
+          "label": "AWAITING_AGENT",
+          "description": "Schema and document text returned to agent. Agent must reason over the text and produce valid JSON matching the schema (1-5 knowledge items with title, category, summary, key_insights, tags, relationships)."
+        },
+        {
+          "id": "validating",
+          "label": "VALIDATING",
+          "description": "Agent submitted JSON via consolidate_store. Doc-store validates against schema."
+        },
+        {
+          "id": "consolidated",
+          "label": "CONSOLIDATED",
+          "description": "Validation passed. Knowledge items are persisted with relationships. Success."
+        },
+        {
+          "id": "validation_error",
+          "label": "VALIDATION_ERROR",
+          "description": "JSON failed validation. Error describes what to fix. Agent must correct and retry."
+        }
+      ],
+      "transitions": [
+        {
+          "from": "pending",
+          "to": "discovered",
+          "label": "consolidate_list",
+          "trigger": "doc_store_consolidate_list"
+        },
+        {
+          "from": "discovered",
+          "to": "preparing",
+          "label": "consolidate_prepare",
+          "trigger": "doc_store_consolidate_prepare"
+        },
+        {
+          "from": "preparing",
+          "to": "awaiting_agent",
+          "label": "returns schema + doc_text",
+          "trigger": "CLI response"
+        },
+        {
+          "from": "awaiting_agent",
+          "to": "validating",
+          "label": "agent produces JSON",
+          "trigger": "doc_store_consolidate_store"
+        },
+        {
+          "from": "validating",
+          "to": "consolidated",
+          "label": "validation passes",
+          "trigger": "success"
+        },
+        {
+          "from": "validating",
+          "to": "validation_error",
+          "label": "validation fails",
+          "trigger": "validation_error"
+        },
+        {
+          "from": "validation_error",
+          "to": "awaiting_agent",
+          "label": "agent fixes JSON + retries",
+          "trigger": "doc_store_consolidate_store",
+          "isRetry": true
+        }
+      ]
+    },
+    {
+      "name": "Agent Doc-Store Lifecycle",
+      "description": "How agents integrate doc-store into their workflow. Before-work (search/query), primary task, after-work (ingest/consolidate).",
+      "states": [
+        {
+          "id": "start",
+          "label": "START",
+          "description": "Agent receives a task."
+        },
+        {
+          "id": "check_existing",
+          "label": "CHECK_EXISTING",
+          "description": "Search/query doc-store for existing knowledge on the topic."
+        },
+        {
+          "id": "primary_work",
+          "label": "PRIMARY_WORK",
+          "description": "Agent performs its main task (research, code, review, etc.)."
+        },
+        {
+          "id": "ingest_sources",
+          "label": "INGEST_SOURCES",
+          "description": "Save useful raw sources to vault via doc_store_ingest."
+        },
+        {
+          "id": "find_pending",
+          "label": "FIND_PENDING",
+          "description": "Run consolidate_list to find docs needing consolidation."
+        },
+        {
+          "id": "consolidate_loop",
+          "label": "CONSOLIDATE_LOOP",
+          "description": "For each pending doc: prepare → produce JSON → store (with retry)."
+        },
+        {
+          "id": "complete",
+          "label": "COMPLETE",
+          "description": "All done. Knowledge persisted in vault."
+        }
+      ],
+      "transitions": [
+        {
+          "from": "start",
+          "to": "check_existing",
+          "label": "search/query",
+          "trigger": "doc_store_search / doc_store_query"
+        },
+        {
+          "from": "check_existing",
+          "to": "primary_work",
+          "label": "existing knowledge incorporated",
+          "trigger": "agent decision"
+        },
+        {
+          "from": "primary_work",
+          "to": "ingest_sources",
+          "label": "save sources",
+          "trigger": "doc_store_ingest"
+        },
+        {
+          "from": "ingest_sources",
+          "to": "find_pending",
+          "label": "check for pending",
+          "trigger": "doc_store_consolidate_list"
+        },
+        {
+          "from": "find_pending",
+          "to": "consolidate_loop",
+          "label": "pending docs found",
+          "trigger": "pending_docs.length > 0"
+        },
+        {
+          "from": "consolidate_loop",
+          "to": "complete",
+          "label": "all docs consolidated",
+          "trigger": "all done"
+        },
+        {
+          "from": "find_pending",
+          "to": "complete",
+          "label": "no pending docs",
+          "trigger": "pending_docs.length === 0"
+        }
+      ]
+    }
+  ],
+  "toolPipeline": [
+    {
+      "tool": "doc_store_status",
+      "group": "status",
+      "label": "Vault Overview",
+      "flowsTo": []
+    },
+    {
+      "tool": "doc_store_ingest",
+      "group": "ingestion",
+      "label": "Add Document",
+      "flowsTo": [
+        "doc_store_consolidate_list"
+      ]
+    },
+    {
+      "tool": "doc_store_consolidate_list",
+      "group": "consolidation",
+      "label": "Find Pending",
+      "flowsTo": [
+        "doc_store_consolidate_prepare"
+      ]
+    },
+    {
+      "tool": "doc_store_consolidate_prepare",
+      "group": "consolidation",
+      "label": "Extract + Schema",
+      "flowsTo": [
+        "(agent_reasoning)"
+      ]
+    },
+    {
+      "tool": "(agent_reasoning)",
+      "group": "consolidation",
+      "label": "Agent Produces JSON",
+      "flowsTo": [
+        "doc_store_consolidate_store"
+      ]
+    },
+    {
+      "tool": "doc_store_consolidate_store",
+      "group": "consolidation",
+      "label": "Validate + Persist",
+      "flowsTo": []
+    },
+    {
+      "tool": "doc_store_search",
+      "group": "retrieval",
+      "label": "BM25 + Vector + Rerank",
+      "flowsTo": []
+    },
+    {
+      "tool": "doc_store_query",
+      "group": "retrieval",
+      "label": "Knowledge Retrieval",
+      "flowsTo": []
+    },
+    {
+      "tool": "doc_store_lint",
+      "group": "maintenance",
+      "label": "Health Check",
+      "flowsTo": []
+    },
+    {
+      "tool": "doc_store_maintain",
+      "group": "maintenance",
+      "label": "Prune + Decay + Archive",
+      "flowsTo": []
+    }
+  ],
+  "delegationTree": {
+    "agent": "User",
+    "mode": "primary",
+    "awarenessLevel": "none",
+    "children": [
+      {
+        "agent": "Sisyphus",
+        "mode": "primary",
+        "awarenessLevel": "full",
+        "children": [
+          {
+            "agent": "Explore",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Librarian",
+            "mode": "subagent",
+            "awarenessLevel": "librarian",
+            "children": []
+          },
+          {
+            "agent": "Oracle",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Metis",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Momus",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Prometheus",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Sisyphus-Junior",
+            "mode": "subagent",
+            "awarenessLevel": "with-actions",
+            "children": []
+          }
+        ]
+      },
+      {
+        "agent": "Atlas",
+        "mode": "primary",
+        "awarenessLevel": "with-actions",
+        "children": [
+          {
+            "agent": "Sisyphus-Junior",
+            "mode": "subagent",
+            "awarenessLevel": "with-actions",
+            "children": []
+          },
+          {
+            "agent": "Explore",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Librarian",
+            "mode": "subagent",
+            "awarenessLevel": "librarian",
+            "children": []
+          },
+          {
+            "agent": "Oracle",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Metis",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Momus",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          },
+          {
+            "agent": "Prometheus",
+            "mode": "subagent",
+            "awarenessLevel": "brief",
+            "children": []
+          }
+        ]
+      },
+      {
+        "agent": "Hephaestus",
+        "mode": "primary",
+        "awarenessLevel": "full",
+        "children": []
+      }
+    ]
+  }
+}

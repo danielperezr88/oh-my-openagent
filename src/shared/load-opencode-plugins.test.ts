@@ -14,7 +14,7 @@ const readFileSyncMock = mock((_path: string, _encoding?: string) => `{
 }`)
 
 async function importFreshLoadOpencodePluginsModule(): Promise<LoadOpencodePluginsModule> {
-  const modulePath = `${new URL("./load-opencode-plugins.ts", import.meta.url).pathname}?test=${Date.now()}-${Math.random()}`
+  const modulePath = `${new URL("./load-opencode-plugins.ts", import.meta.url).href}?test=${Date.now()}-${Math.random()}`
   return import(modulePath)
 }
 

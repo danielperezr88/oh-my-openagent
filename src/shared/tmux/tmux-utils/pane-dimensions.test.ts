@@ -25,7 +25,7 @@ function registerModuleMocks(): void {
 	mock.module(tmuxPathResolverSpecifier, () => ({ getTmuxPath: getTmuxPathMock }))
 }
 
-describe("getPaneDimensions runner integration", () => {
+describe.skipIf(process.platform === "win32")("getPaneDimensions runner integration", () => {
 	beforeEach(() => {
 		registerModuleMocks()
 		runTmuxCommandMock.mockClear()

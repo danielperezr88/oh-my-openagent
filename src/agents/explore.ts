@@ -1,6 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentMode, AgentPromptMetadata } from "./types"
 import { createAgentToolRestrictions } from "../shared/permission-compat"
+import { buildDocStoreAwarenessBrief } from "./dynamic-agent-doc-store-section"
 
 const MODE: AgentMode = "subagent"
 
@@ -113,7 +114,9 @@ Use the right tool for the job:
 - **File patterns** (find by name/extension): glob
 - **History/evolution** (when added, who changed): git commands
 
-Flood with parallel calls. Cross-validate findings across multiple tools.`,
+Flood with parallel calls. Cross-validate findings across multiple tools.
+
+${buildDocStoreAwarenessBrief()}`,
   }
 }
 createExploreAgent.mode = MODE

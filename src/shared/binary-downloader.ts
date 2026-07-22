@@ -75,7 +75,7 @@ export function ensureExecutable(binaryPath: string): void {
 }
 
 function parseTarEntry(line: string): ArchiveEntry | null {
-  const match = line.match(/^([^\s])\S*\s+\d+\s+\S+\s+\S+\s+\d+\s+\w+\s+\d+\s+(?:\d{2}:\d{2}|\d{4})\s+(.*)$/)
+  const match = line.match(/^([^\s])\S*\s+\d+\s+\S+\s+\S+\s+\d+\s+[\w.]+\s+\d+\s+(?:\d{2}:\d{2}|\d{4})\s+(.*)$/)
   if (!match) {
     return null
   }
@@ -105,6 +105,7 @@ async function listTarEntries(archivePath: string, cwd?: string): Promise<Archiv
     cwd,
     stdout: "pipe",
     stderr: "pipe",
+    env: { ...process.env, LC_ALL: "C" },
   })
 
   const [exitCode, stdout, stderr] = await Promise.all([

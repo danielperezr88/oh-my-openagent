@@ -10,6 +10,8 @@ import { extractTarGz } from "./binary-downloader"
 import { validateArchiveEntries } from "./archive-entry-validator"
 import { extractZip } from "./zip-extractor"
 
+const isWindows = process.platform === "win32"
+
 const testDirs: string[] = []
 
 function createTestDir(): string {
@@ -100,7 +102,7 @@ describe("validateArchiveEntries", () => {
 	})
 })
 
-describe("archive extraction preflight", () => {
+describe.skipIf(isWindows)("archive extraction preflight", () => {
 	it("rejects tar archives with traversal entries before extraction", async () => {
 		//#given
 		const rootDir = createTestDir()

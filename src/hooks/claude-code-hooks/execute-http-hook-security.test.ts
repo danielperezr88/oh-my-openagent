@@ -12,8 +12,9 @@ const originalFetch = globalThis.fetch
 const originalEnv = process.env
 
 async function importFreshExecuteHttpHook() {
-  const modulePath = `${new URL("./execute-http-hook.ts", import.meta.url).pathname}?t=${Date.now()}-${Math.random()}`
-  return import(modulePath)
+  const url = new URL("./execute-http-hook.ts", import.meta.url)
+  url.searchParams.set("t", `${Date.now()}-${Math.random()}`)
+  return import(url.href)
 }
 
 function installSharedLogMock(logCalls: Array<{ message: string; data?: unknown }>): void {

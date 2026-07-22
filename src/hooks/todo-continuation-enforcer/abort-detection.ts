@@ -15,3 +15,15 @@ export function isLastAssistantMessageAborted(
 
   return errorName === "MessageAbortedError" || errorName === "AbortError"
 }
+
+export function isLastAssistantMessageErrored(
+  messages: Array<{ info?: MessageInfo }>
+): boolean {
+  if (!messages || messages.length === 0) return false
+
+  const assistantMessages = messages.filter((message) => message.info?.role === "assistant")
+  if (assistantMessages.length === 0) return false
+
+  const lastAssistant = assistantMessages[assistantMessages.length - 1]
+  return lastAssistant.info?.error != null
+}

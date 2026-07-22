@@ -6,6 +6,11 @@ import { tmpdir } from "os"
 
 import { resolveAgentDefinitionPaths } from "./resolve-agent-definition-paths"
 
+/** Normalize path separators for cross-platform assertions */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/[A-Za-z]:(?=\/)/g, "")
+}
+
 describe("resolveAgentDefinitionPaths", () => {
   let tempDir: string
 
@@ -25,7 +30,7 @@ describe("resolveAgentDefinitionPaths", () => {
         null,
       )
 
-      expect(result).toEqual([join(tempDir, "agents/my-agent.md")])
+      expect(result.map(normalizePath)).toEqual([normalizePath(join(tempDir, "agents/my-agent.md"))])
     })
   })
 
@@ -39,7 +44,7 @@ describe("resolveAgentDefinitionPaths", () => {
         null,
       )
 
-      expect(result).toEqual([absPath])
+      expect(result.map(normalizePath)).toEqual([normalizePath(absPath)])
     })
   })
 
@@ -51,7 +56,7 @@ describe("resolveAgentDefinitionPaths", () => {
         null,
       )
 
-      expect(result).toEqual([join(homedir(), "agents/test.md")])
+      expect(result.map(normalizePath)).toEqual([normalizePath(join(homedir(), "agents", "test.md"))])
     })
   })
 
@@ -81,7 +86,7 @@ describe("resolveAgentDefinitionPaths", () => {
         projectDir,
       )
 
-      expect(result).toEqual([join(projectDir, "agents/a.md")])
+      expect(result.map(normalizePath)).toEqual([normalizePath(join(projectDir, "agents/a.md"))])
     })
   })
 
@@ -93,7 +98,7 @@ describe("resolveAgentDefinitionPaths", () => {
         null,
       )
 
-      expect(result).toEqual(["/some/outside/path/agent.md"])
+      expect(result.map(normalizePath)).toEqual(["/some/outside/path/agent.md"])
     })
   })
 
@@ -116,7 +121,7 @@ describe("resolveAgentDefinitionPaths", () => {
         projectDir,
       )
 
-      expect(result).toEqual([join(projectDir, "valid.md")])
+      expect(result.map(normalizePath)).toEqual([normalizePath(join(projectDir, "valid.md"))])
     })
   })
 })

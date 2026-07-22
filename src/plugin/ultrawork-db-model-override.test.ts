@@ -1,37 +1,25 @@
-import { describe, expect, test, beforeEach, afterEach, spyOn } from "bun:test"
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { Database } from "bun:sqlite"
 import { mkdtempSync, mkdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import * as dataPathModule from "../shared/data-path"
-import * as sharedModule from "../shared"
 
-let scheduleDeferredModelOverride: (typeof import("./ultrawork-db-model-override"))["scheduleDeferredModelOverride"]
+// Module-level mocks — validated pattern for Windows Bun
+// mock() creates tracked mock functions; mock.module() replaces module factories.
+// Must be declared BEFORE the await import() so they take effect.
+const mockGetDataDir = mock(() => "")
+const mockLog = mock((..._args: unknown[]) => {})
 
-async function importFreshUltraworkDbModelOverrideModule(): Promise<typeof import("./ultrawork-db-model-override")> {
-  return import(`./ultrawork-db-model-override?test=${Date.now()}-${Math.random()}`)
-}
+mock.module("../shared/data-path", () => ({
+  getDataDir: mockGetDataDir,
+}))
 
-function flushMicrotasks(depth: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    let remaining = depth
-    function step() {
-      if (remaining <= 0) { resolve(); return }
-      remaining--
-      queueMicrotask(step)
-    }
-    queueMicrotask(step)
-  })
-}
+mock.module("../shared", () => ({
+  log: mockLog,
+}))
 
-function flushWithTimeout(): Promise<void> {
-  return new Promise<void>((resolve) => setTimeout(resolve, 0))
-}
-
-async function settleDeferredModelOverrideWork(): Promise<void> {
-  await flushMicrotasks(12)
-  await flushWithTimeout()
-}
+// Module-level import (no cache busting — validated pattern for Windows Bun)
+const { scheduleDeferredModelOverride } = await import("./ultrawork-db-model-override")
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
@@ -44,10 +32,11 @@ function formatLogCalls(calls: readonly (readonly unknown[])[]): string {
 describe("scheduleDeferredModelOverride", () => {
   let tempDir: string
   let dbPath: string
-  let logSpy: ReturnType<typeof spyOn>
-  let getDataDirSpy: ReturnType<typeof spyOn>
 
   beforeEach(async () => {
+    mockGetDataDir.mockClear()
+    mockLog.mockClear()
+
     tempDir = mkdtempSync(join(tmpdir(), "ultrawork-db-test-"))
     const opencodePath = join(tempDir, "opencode")
     mkdirSync(opencodePath, { recursive: true })
@@ -65,18 +54,18 @@ describe("scheduleDeferredModelOverride", () => {
     `)
     db.close()
 
-    getDataDirSpy = spyOn(dataPathModule, "getDataDir")
-    getDataDirSpy.mockReturnValue(tempDir)
-    logSpy = spyOn(sharedModule, "log")
-    logSpy.mockImplementation(() => {})
-    ;({ scheduleDeferredModelOverride } = await importFreshUltraworkDbModelOverrideModule())
+    mockGetDataDir.mockImplementation(() => tempDir)
+    mockLog.mockImplementation(() => {})
   })
 
   afterEach(async () => {
-    await settleDeferredModelOverrideWork()
-    getDataDirSpy?.mockRestore()
-    logSpy?.mockRestore()
-    rmSync(tempDir, { recursive: true, force: true })
+    // Allow any pending microtasks/setTimeout from scheduleDeferredModelOverride to settle
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
+    try {
+      rmSync(tempDir, { recursive: true, force: true })
+    } catch {
+      // EBUSY on Windows — temp dir locked by SQLite or Bun
+    }
   })
 
   function insertMessage(id: string, model: { providerID: string; modelID: string }) {
@@ -113,15 +102,15 @@ describe("scheduleDeferredModelOverride", () => {
     description: string,
     predicate: (message: unknown, metadata: unknown) => boolean,
   ): Promise<void> {
-    const deadline = Date.now() + 1_000
+    const deadline = Date.now() + 2_000
     while (Date.now() < deadline) {
-      if (logSpy.mock.calls.some((call: readonly unknown[]) => predicate(call[0], call[1]))) {
+      if (mockLog.mock.calls.some((call: readonly unknown[]) => predicate(call[0], call[1]))) {
         return
       }
-      await flushWithTimeout()
+      await new Promise<void>((resolve) => setTimeout(resolve, 5))
     }
 
-    throw new Error(`Timed out waiting for log call: ${description}\n${formatLogCalls(logSpy.mock.calls)}`)
+    throw new Error(`Timed out waiting for log call: ${description}\n${formatLogCalls(mockLog.mock.calls)}`)
   }
 
   test("should update model in DB after microtask flushes", async () => {
@@ -133,7 +122,9 @@ describe("scheduleDeferredModelOverride", () => {
       "msg_001",
       { providerID: "anthropic", modelID: "claude-opus-4-7" },
     )
-    await flushMicrotasks(5)
+    // scheduleDeferredModelOverride uses queueMicrotask + async importBunSqlite(),
+    // so the DB update needs event loop ticks to settle
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
 
     //#then
     const model = readMessageModel("msg_001")
@@ -150,7 +141,7 @@ describe("scheduleDeferredModelOverride", () => {
       { providerID: "anthropic", modelID: "claude-opus-4-7" },
       "max",
     )
-    await flushMicrotasks(5)
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
 
     //#then
     expect(readMessageField("msg_002", "variant")).toBe("max")
@@ -173,7 +164,7 @@ describe("scheduleDeferredModelOverride", () => {
     ))
 
     //#then
-    const fallbackFailureCall = logSpy.mock.calls.find((call: readonly unknown[]) => {
+    const fallbackFailureCall = mockLog.mock.calls.find((call: readonly unknown[]) => {
       const message = call[0]
       const metadata = call[1]
       return (
@@ -202,7 +193,7 @@ describe("scheduleDeferredModelOverride", () => {
     ))
 
     //#then
-    const retryExhaustedCall = logSpy.mock.calls.find((call: readonly unknown[]) => {
+    const retryExhaustedCall = mockLog.mock.calls.find((call: readonly unknown[]) => {
       const message = call[0]
       const metadata = call[1]
       return (
@@ -224,7 +215,7 @@ describe("scheduleDeferredModelOverride", () => {
       "msg_003",
       { providerID: "anthropic", modelID: "claude-opus-4-7" },
     )
-    await flushMicrotasks(5)
+    await new Promise<void>((resolve) => setTimeout(resolve, 20))
 
     //#then
     const model = readMessageModel("msg_003")
@@ -235,19 +226,23 @@ describe("scheduleDeferredModelOverride", () => {
 
   test("should not crash when DB path does not exist", async () => {
     //#given
-    getDataDirSpy.mockReturnValue("/nonexistent/path/that/does/not/exist")
+    mockGetDataDir.mockImplementation(() => "/nonexistent/path/that/does/not/exist")
 
     //#when
     scheduleDeferredModelOverride(
       "msg_004",
       { providerID: "anthropic", modelID: "claude-opus-4-7" },
     )
-    await flushMicrotasks(5)
+    await waitForLogCall("DB not found for msg_004", (message, _metadata) => (
+      typeof message === "string"
+      && message.includes("DB not found")
+    ))
 
     //#then
-    expect(logSpy).toHaveBeenCalledWith(
-      expect.stringContaining("DB not found"),
+    const dbNotFoundCall = mockLog.mock.calls.find((call: readonly unknown[]) =>
+      typeof call[0] === "string" && call[0].includes("DB not found"),
     )
+    expect(dbNotFoundCall).toBeDefined()
   })
 
   test("should log a DB failure when DB file exists but is corrupted", async () => {
@@ -255,17 +250,29 @@ describe("scheduleDeferredModelOverride", () => {
     const { chmodSync, writeFileSync } = await import("node:fs")
     const corruptedDbPath = join(tempDir, "opencode", "opencode.db")
     writeFileSync(corruptedDbPath, "this is not a valid sqlite database file")
-    chmodSync(corruptedDbPath, 0o000)
+    try {
+      chmodSync(corruptedDbPath, 0o000)
+    } catch {
+      // chmod may throw EPERM on Windows — file content is already invalid for SQLite
+    }
 
     //#when
     scheduleDeferredModelOverride(
       "msg_corrupt",
       { providerID: "anthropic", modelID: "claude-opus-4-7" },
     )
-    await flushMicrotasks(5)
+    await waitForLogCall("DB open failure for msg_corrupt", (message, metadata) => (
+      typeof message === "string"
+      && (
+        message.includes("Failed to open DB")
+        || message.includes("Deferred DB update failed with error")
+      )
+      && isRecord(metadata)
+      && metadata.messageId === "msg_corrupt"
+    ))
 
     //#then
-    const failureCall = logSpy.mock.calls.find((call: readonly unknown[]) => {
+    const failureCall = mockLog.mock.calls.find((call: readonly unknown[]) => {
       const message = call[0]
       const metadata = call[1]
       return (

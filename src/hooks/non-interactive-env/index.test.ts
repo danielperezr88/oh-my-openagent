@@ -23,6 +23,9 @@ describe("non-interactive-env hook", () => {
     delete process.env.PSModulePath
     process.env.SHELL = "/bin/bash"
     process.env.OPENCODE_NON_INTERACTIVE = "true"
+    // Default to linux platform so git-command tests get Unix export syntax.
+    // Platform-aware tests override this per-test.
+    Object.defineProperty(process, "platform", { value: "linux" })
   })
 
   afterEach(() => {

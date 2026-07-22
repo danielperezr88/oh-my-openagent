@@ -59,7 +59,7 @@ function nodeFallbackPath(fileName: string): string {
 
 function loadNodeFallbackBunFileShim(): NodeFallbackExports {
   const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "bun-file-shim.ts")
-  const source = readFileSync(sourcePath, "utf8")
+  const source = readFileSync(sourcePath, "utf8").replace(/\r\n/g, "\n")
   const importStatement = 'import { access, readFile, unlink, writeFile } from "node:fs/promises"\n\n'
   const interfaceSignature = "export interface BunFileLike {"
   const bunFileSignature = "export function bunFile(path: string): BunFileLike {"

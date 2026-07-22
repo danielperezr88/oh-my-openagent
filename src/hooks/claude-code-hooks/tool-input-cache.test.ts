@@ -1,35 +1,33 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
 import { unsafeTestValue } from "../../../test-support/unsafe-test-value"
+import {
+  cacheToolInput,
+  getToolInput,
+  clearToolInputCache,
+  stopToolInputCacheCleanup,
+  _testReset,
+} from "./tool-input-cache"
 
 describe("tool-input-cache", () => {
-  const originalSetInterval = globalThis.setInterval
-  const originalClearInterval = globalThis.clearInterval
-
   beforeEach(() => {
-    globalThis.setInterval = originalSetInterval
-    globalThis.clearInterval = originalClearInterval
+    _testReset()
   })
 
-  afterEach(async () => {
-    const modulePath = new URL("./tool-input-cache.ts", import.meta.url).pathname
-    const cacheModule = await import(`${modulePath}?cleanup=${Date.now()}`)
-    cacheModule.stopToolInputCacheCleanup()
+  afterEach(() => {
+    _testReset()
   })
 
   test("#given cached entries from multiple sessions #when clearing one session #then only matching entries are removed", async () => {
     //#given
-    const modulePath = new URL("./tool-input-cache.ts", import.meta.url).pathname
-    const cacheModule = await import(`${modulePath}?session-clear`)
-
-    cacheModule.cacheToolInput("ses_a", "Read", "call-1", { path: "a" })
-    cacheModule.cacheToolInput("ses_b", "Read", "call-2", { path: "b" })
+    cacheToolInput("ses_a", "Read", "call-1", { path: "a" })
+    cacheToolInput("ses_b", "Read", "call-2", { path: "b" })
 
     //#when
-    cacheModule.clearToolInputCache("ses_a")
+    clearToolInputCache("ses_a")
 
     //#then
-    expect(cacheModule.getToolInput("ses_a", "Read", "call-1")).toBeNull()
-    expect(cacheModule.getToolInput("ses_b", "Read", "call-2")).toEqual({ path: "b" })
+    expect(getToolInput("ses_a", "Read", "call-1")).toBeNull()
+    expect(getToolInput("ses_b", "Read", "call-2")).toEqual({ path: "b" })
   })
 
   test("#given cleanup timer started #when stop cleanup runs #then interval is cleared and cache is emptied", async () => {
@@ -40,16 +38,18 @@ describe("tool-input-cache", () => {
     globalThis.setInterval = unsafeTestValue<typeof setInterval>(setIntervalMock)
     globalThis.clearInterval = unsafeTestValue<typeof clearInterval>(clearIntervalMock)
 
-    const modulePath = new URL("./tool-input-cache.ts", import.meta.url).pathname
-    const cacheModule = await import(`${modulePath}?stop-clear`)
-    cacheModule.cacheToolInput("ses_stop", "Read", "call-stop", { path: "stop" })
+    try {
+      cacheToolInput("ses_stop", "Read", "call-stop", { path: "stop" })
 
-    //#when
-    cacheModule.stopToolInputCacheCleanup()
+      //#when
+      stopToolInputCacheCleanup()
 
-    //#then
-    expect(setIntervalMock).toHaveBeenCalledTimes(1)
-    expect(clearIntervalMock).toHaveBeenCalledWith(intervalHandle)
-    expect(cacheModule.getToolInput("ses_stop", "Read", "call-stop")).toBeNull()
+      //#then
+      expect(setIntervalMock).toHaveBeenCalledTimes(1)
+      expect(clearIntervalMock).toHaveBeenCalledWith(intervalHandle)
+      expect(getToolInput("ses_stop", "Read", "call-stop")).toBeNull()
+    } finally {
+      globalThis.setInterval = unsafeTestValue<typeof setInterval>(() => intervalHandle)
+    }
   })
 })

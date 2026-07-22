@@ -31,7 +31,12 @@ import { readConnectedProvidersCache } from "../shared/connected-providers-cache
 import { invalidateContextWindowUsageCache } from "../shared/dynamic-truncator";
 import { log } from "../shared/logger";
 import { isAmbiguousPostDispatchPromptFailure } from "../shared/prompt-failure-classifier";
-import { shouldRetryError } from "../shared/model-error-classifier";
+import {
+  shouldRetryError,
+  extractPlatformErrorCode,
+  isProviderOverloadedError,
+  extractProviderFromErrorUrl,
+} from "../shared/model-error-classifier";
 import { buildFallbackChainFromModels } from "../shared/fallback-chain-from-models";
 import { extractRetryAttempt, normalizeRetryStatusMessage } from "../shared/retry-status-utils";
 import { clearSessionModel, getSessionModel, setSessionModel } from "../shared/session-model-state";
@@ -226,6 +231,16 @@ export function createEventHandler(args: {
           }): Promise<unknown>;
         };
       };
+      tui: {
+        showToast: (input: {
+          body: {
+            title: string;
+            message: string;
+            variant: "success" | "error" | "info" | "warning";
+            duration: number;
+          };
+        }) => Promise<unknown>;
+      };
     };
   };
   const isRuntimeFallbackEnabled =
@@ -245,6 +260,7 @@ export function createEventHandler(args: {
   const lastKnownModelBySession = new Map<string, { providerID: string; modelID: string }>();
   const modelFallbackContinuationsInFlight = new Set<string>();
   const lastDispatchedModelFallbackContinuationKeys = new Map<string, FallbackContinuationDedupeState>();
+  const providerOverloadUntil = new Map<string, number>();
 
   const resolveFallbackProviderID = (sessionID: string, providerHint?: string): string => {
     const normalizedProviderHint = providerHint?.trim();
@@ -330,8 +346,10 @@ export function createEventHandler(args: {
     await runEventHookSafely("compactionContextInjector", hooks.compactionContextInjector?.event, input);
     await runEventHookSafely("compactionTodoPreserver", hooks.compactionTodoPreserver?.event, input);
     await runEventHookSafely("writeExistingFileGuard", hooks.writeExistingFileGuard?.event, input);
-    await runEventHookSafely("atlasHook", hooks.atlasHook?.handler, input);
-    await runEventHookSafely("autoSlashCommand", hooks.autoSlashCommand?.event, input);
+  await runEventHookSafely("atlasHook", hooks.atlasHook?.handler, input);
+  await runEventHookSafely("autoSlashCommand", hooks.autoSlashCommand?.event, input);
+  await runEventHookSafely("envInjector", hooks.envInjector?.event, input);
+  await runEventHookSafely("continuousLearningConsolidate", hooks.continuousLearningConsolidate?.event, input);
   };
 
   const recentSyntheticIdles = new Map<string, number>();
@@ -846,6 +864,43 @@ export function createEventHandler(args: {
 
                   if (setFallback && shouldAutoContinue) {
                     lastHandledModelErrorMessageID.set(sessionID, assistantMessageID);
+
+                    const overloadProvider = isProviderOverloadedError(assistantError)
+                      ? (extractProviderFromErrorUrl(assistantError) ?? currentProvider)
+                      : null;
+                    if (overloadProvider) {
+                      const now = Date.now();
+                      const cooldownUntil = providerOverloadUntil.get(overloadProvider) ?? 0;
+                      const errorCode = extractPlatformErrorCode(assistantError) ?? "unknown";
+
+                      if (now < cooldownUntil) {
+                        await pluginContext.client.tui
+                          .showToast({
+                            body: {
+                              title: "Provider Overloaded",
+                              message: `${overloadProvider} is temporarily overloaded (error ${errorCode}). Retrying in ${Math.ceil((cooldownUntil - now) / 1000)}s.`,
+                              variant: "warning" as const,
+                              duration: 5000,
+                            },
+                          })
+                          .catch(() => {});
+                        return;
+                      }
+
+                      providerOverloadUntil.set(overloadProvider, now + 30_000);
+                      await pluginContext.client.tui
+                        .showToast({
+                          body: {
+                            title: "Provider Temporarily Overloaded",
+                            message: `${overloadProvider} returned error ${errorCode}. Retrying with fallback model...`,
+                            variant: "warning" as const,
+                            duration: 3000,
+                          },
+                        })
+                        .catch(() => {});
+                      await new Promise((r) => setTimeout(r, 5_000));
+                    }
+
                     await autoContinueAfterFallback(sessionID, "message.updated", fallbackContext);
                   }
                 }
@@ -1025,8 +1080,100 @@ export function createEventHandler(args: {
                 : false;
 
               if (setFallback && shouldAutoContinue) {
+                const overloadProvider = isProviderOverloadedError(error)
+                  ? (providerHint ?? currentProvider)
+                  : null;
+                if (overloadProvider) {
+                  const now = Date.now();
+                  const cooldownUntil = providerOverloadUntil.get(overloadProvider) ?? 0;
+                  const errorCode = extractPlatformErrorCode(error) ?? "unknown";
+
+                  if (now < cooldownUntil) {
+                    await pluginContext.client.tui
+                      .showToast({
+                        body: {
+                          title: "Provider Overloaded",
+                          message: `${overloadProvider} is temporarily overloaded (error ${errorCode}). Retrying in ${Math.ceil((cooldownUntil - now) / 1000)}s.`,
+                          variant: "warning" as const,
+                          duration: 5000,
+                        },
+                      })
+                      .catch(() => {});
+                    return;
+                  }
+
+                  providerOverloadUntil.set(overloadProvider, now + 30_000);
+                  await pluginContext.client.tui
+                    .showToast({
+                      body: {
+                        title: "Provider Temporarily Overloaded",
+                        message: `${overloadProvider} returned error ${errorCode}. Retrying with fallback model...`,
+                        variant: "warning" as const,
+                        duration: 3000,
+                      },
+                    })
+                    .catch(() => {});
+                  await new Promise((r) => setTimeout(r, 5_000));
+                }
+
                 await autoContinueAfterFallback(sessionID, "session.error", fallbackContext);
               }
+            }
+          }
+        }
+        else if (sessionID && !isModelFallbackEnabled && !isRuntimeFallbackEnabled) {
+          const platformCode = extractPlatformErrorCode(error);
+          if (platformCode !== null) {
+            const overloadProvider = extractProviderFromErrorUrl(error) ?? "unknown";
+
+            if (
+              shouldAutoRetrySession(sessionID) &&
+              !hooks.stopContinuationGuard?.isStopped(sessionID)
+            ) {
+              const now = Date.now();
+              const cooldownUntil = providerOverloadUntil.get(overloadProvider) ?? 0;
+
+              if (now < cooldownUntil) {
+                log("[event] platform-error-recovery: provider in cooldown, skipping retry", {
+                  provider: overloadProvider,
+                  code: platformCode,
+                  remainingMs: cooldownUntil - now,
+                });
+                await pluginContext.client.tui
+                  .showToast({
+                    body: {
+                      title: "Provider Overloaded",
+                      message: `${overloadProvider} is temporarily overloaded (error ${platformCode}). Retrying in ${Math.ceil((cooldownUntil - now) / 1000)}s.`,
+                      variant: "warning" as const,
+                      duration: 5000,
+                    },
+                  })
+                  .catch(() => {});
+                return;
+              }
+
+              providerOverloadUntil.set(overloadProvider, now + 30_000);
+
+              log("[event] platform-error-recovery: retrying after platform error", {
+                provider: overloadProvider,
+                code: platformCode,
+                sessionID,
+              });
+
+              await pluginContext.client.tui
+                .showToast({
+                  body: {
+                    title: "Provider Temporarily Overloaded",
+                    message: `${overloadProvider} returned error ${platformCode}. Retrying in 5s...`,
+                    variant: "warning" as const,
+                    duration: 3000,
+                  },
+                })
+                .catch(() => {});
+
+              await new Promise((r) => setTimeout(r, 5_000));
+
+              await autoContinueAfterFallback(sessionID, "session.error.platform-recovery");
             }
           }
         }

@@ -8,6 +8,7 @@ import type {
   AvailableCategory,
 } from "../dynamic-agent-prompt-builder";
 import { categorizeTools, buildAgentIdentitySection } from "../dynamic-agent-prompt-builder";
+import { buildDocStoreSection } from "../dynamic-agent-doc-store-section";
 import { getGptApplyPatchPermission } from "../gpt-apply-patch-guard";
 import { getFrontierToolSchemaPermission } from "../frontier-tool-schema-guard";
 
@@ -107,7 +108,7 @@ function buildDynamicHephaestusPrompt(ctx?: HephaestusContext): string {
     "Autonomous deep worker for software engineering from OhMyOpenCode",
   );
 
-  return `${agentIdentity}\n${basePrompt}`;
+  return `${agentIdentity}\n${basePrompt}\n\n${buildDocStoreSection()}`;
 }
 
 export function createHephaestusAgent(

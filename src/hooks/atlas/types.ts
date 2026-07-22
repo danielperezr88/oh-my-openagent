@@ -16,6 +16,7 @@ export interface AtlasHookOptions {
   idleSettleMs?: number
   /** Enable auto-commit after each atomic task completion (default: true) */
   autoCommit?: boolean
+  pluginConfig?: Record<string, unknown>
 }
 
 export interface ToolExecuteAfterInput {

@@ -138,12 +138,13 @@ describe("opencode-version", () => {
       const calls: string[] = []
 
       // when getting version
+      const normalizePath = (p: string) => p.replace(/\\/g, "/")
       const result = getOpenCodeVersion({
         getBinaryPath: () => "/tmp/opencode-ai/bin/opencode",
         realpath: (filePath) => filePath,
-        exists: (filePath) => filePath === "/tmp/opencode-ai/package.json",
+        exists: (filePath) => normalizePath(filePath) === "/tmp/opencode-ai/package.json",
         readText: (filePath) => {
-          calls.push(`read:${filePath}`)
+          calls.push(`read:${normalizePath(filePath)}`)
           return JSON.stringify({ name: "opencode-ai", version: "1.14.41" })
         },
         execCommand: () => {

@@ -72,7 +72,7 @@ describe("migrateLegacyWorkspaceDirectory", () => {
     expect(readFileSync(targetNotepadPath, "utf-8")).toBe("existing note")
   })
 
-  test("#given legacy workspace contains symlinks #when migrating #then skips symlinks without copying target contents", () => {
+  test.skipIf(process.platform === "win32")("#given legacy workspace contains symlinks #when migrating #then skips symlinks without copying target contents", () => {
     // given
     const externalFilePath = join(testDirectory, "external-secret.md")
     const legacyLinkPath = join(testDirectory, ".sisyphus", "plans", "linked.md")

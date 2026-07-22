@@ -10,6 +10,16 @@ let isRunning = false
 const sessionLastWarning = new Map<string, number>()
 const DEDUP_WINDOW_MS = 30_000 // 30 seconds — fire at most once per response turn
 
+/** Reset session dedup state for test isolation. Does NOT reset isRunning — use _testResetLock for that. */
+export function _testResetSessionDedup(): void {
+  sessionLastWarning.clear()
+}
+
+/** Reset isRunning semaphore for test isolation. Call after any in-flight processWithCli completes. */
+export function _testResetLock(): void {
+  isRunning = false
+}
+
 /** Detect whether a comment string looks like a line-comment or block-comment pattern */
 function hasCommentSyntax(text: string | undefined): boolean {
   if (!text) return false

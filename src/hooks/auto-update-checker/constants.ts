@@ -11,11 +11,12 @@ export const PACKAGE_NAME = PUBLISHED_PACKAGE_NAME
 /**
  * All package names the canonical plugin may be published under.
  *
- * The package is published to npm as both `oh-my-opencode` (legacy canonical)
- * and `oh-my-openagent` (current canonical). Any code that *reads* an
- * installed package.json or walks up from an import path must accept both,
- * because the installed name depends on which package the user added to
- * their config. Code that *writes* continues to use {@link PACKAGE_NAME}.
+ * The package is published to npm as `oh-my-openagent`.
+ * Previously it was `oh-my-opencode` (legacy). The internal plugin
+ * identity is `oh-my-openagent`. Any code that *reads* an installed
+ * package.json or walks up from an import path must accept all three,
+ * because the installed name depends on which version the user installed.
+ * Code that *writes* continues to use {@link PACKAGE_NAME}.
  */
 export const ACCEPTED_PACKAGE_NAMES = SHARED_ACCEPTED_PACKAGE_NAMES
 export const NPM_REGISTRY_URL = `https://registry.npmjs.org/-/package/${PACKAGE_NAME}/dist-tags`

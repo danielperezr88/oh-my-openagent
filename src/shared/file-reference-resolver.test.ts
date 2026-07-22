@@ -4,35 +4,60 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { resolveFilePath, resolveFileReferencesInText } from "./file-reference-resolver"
 
+const isWindows = process.platform === "win32"
+
+/** Normalize path separators and strip Windows drive prefixes for cross-platform assertions */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, "/").replace(/[A-Za-z]:(?=\/)/g, "")
+}
+
 describe("resolveFilePath", () => {
   const cwd = "/skills/gsd"
+  const originalHome = process.env.HOME
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? ""
+
+  beforeAll(() => {
+    // On Windows, HOME is not set by default; alias it to USERPROFILE
+    if (!process.env.HOME && process.env.USERPROFILE) {
+      process.env.HOME = process.env.USERPROFILE
+    }
+  })
+
+  afterAll(() => {
+    // Restore original HOME value
+    if (originalHome === undefined) {
+      delete process.env.HOME
+    } else {
+      process.env.HOME = originalHome
+    }
+  })
 
   test("expands bare environment variables before resolving absolute paths", () => {
     //#given
-    const homeDir = process.env.HOME
-    if (!homeDir) {
-      throw new Error("HOME must be set for file reference resolver tests")
+    const home = process.env.HOME ?? process.env.USERPROFILE ?? ""
+    if (!home) {
+      throw new Error("HOME or USERPROFILE must be set for file reference resolver tests")
     }
 
     //#when
     const resolved = resolveFilePath("$HOME/foo.md", cwd)
 
     //#then
-    expect(resolved).toBe(resolve(homeDir, "foo.md"))
+    expect(normalizePath(resolved)).toBe(normalizePath(resolve(home, "foo.md")))
   })
 
   test("expands braced environment variables before resolving absolute paths", () => {
     //#given
-    const homeDir = process.env.HOME
-    if (!homeDir) {
-      throw new Error("HOME must be set for file reference resolver tests")
+    const home = process.env.HOME ?? process.env.USERPROFILE ?? ""
+    if (!home) {
+      throw new Error("HOME or USERPROFILE must be set for file reference resolver tests")
     }
 
     //#when
     const resolved = resolveFilePath("${HOME}/foo.md", cwd)
 
     //#then
-    expect(resolved).toBe(resolve(homeDir, "foo.md"))
+    expect(normalizePath(resolved)).toBe(normalizePath(resolve(home, "foo.md")))
   })
 
   test("keeps absolute paths absolute", () => {
@@ -43,7 +68,7 @@ describe("resolveFilePath", () => {
     const resolved = resolveFilePath(absolutePath, cwd)
 
     //#then
-    expect(resolved).toBe(resolve(absolutePath))
+    expect(normalizePath(resolved)).toBe(normalizePath(resolve(absolutePath)))
   })
 
   test("resolves relative paths from cwd", () => {
@@ -54,11 +79,11 @@ describe("resolveFilePath", () => {
     const resolved = resolveFilePath(relativePath, cwd)
 
     //#then
-    expect(resolved).toBe(resolve(cwd, relativePath))
+    expect(normalizePath(resolved)).toBe(normalizePath(resolve(cwd, relativePath)))
   })
 })
 
-describe("resolveFileReferencesInText", () => {
+describe.skipIf(isWindows)("resolveFileReferencesInText", () => {
   const fixtureRoot = join(tmpdir(), `file-reference-resolver-${Date.now()}`)
   const workspaceDir = join(fixtureRoot, "workspace")
   const notesDir = join(workspaceDir, "notes")

@@ -120,6 +120,8 @@ async function launchAtlasOracleSubagent(manager: BackgroundManager): Promise<st
   return task.id
 }
 
+const USAGE_LIMIT_ERROR_MESSAGE = "Usage limit reached for 1 hour. Your limit will reset at 2026-01-01T00:00:00Z"
+
 function emitUsageLimitError(manager: BackgroundManager, sessionID: string): void {
   manager.handleEvent({
     type: "session.error",
@@ -130,7 +132,7 @@ function emitUsageLimitError(manager: BackgroundManager, sessionID: string): voi
         data: {
           error: {
             type: "usage_limit_reached",
-            message: "The usage limit has been reached",
+            message: USAGE_LIMIT_ERROR_MESSAGE,
           },
         },
       },
@@ -204,7 +206,7 @@ describe("Atlas-spawned subagent runtime fallback", () => {
     //#then
     const task = manager.getTask(taskID)
     expect(task?.status).toBe("error")
-    expect(task?.error).toBe("The usage limit has been reached")
+    expect(task?.error).toBe(USAGE_LIMIT_ERROR_MESSAGE)
     expect(task?.attemptCount).toBe(1)
     expect(createdSessions).toHaveLength(2)
 

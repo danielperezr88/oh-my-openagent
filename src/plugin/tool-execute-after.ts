@@ -181,6 +181,8 @@ export function createToolExecuteAfterHandler(args: {
       await hooks.fsyncSkipWarning?.["tool.execute.after"]?.(hookInput, output)
       await hooks.jsonErrorRecovery?.["tool.execute.after"]?.(hookInput, output)
       await hooks.planFormatValidator?.["tool.execute.after"]?.(hookInput, output)
+      await hooks.continuousLearningObserve?.["tool.execute.after"]?.({ ...hookInput, args: hookInput.args ?? {} }, output)
+      await hooks.postEditDiagnostics?.["tool.execute.after"]?.({ ...hookInput, args: hookInput.args ?? {} }, output)
     }
 
     if (input.tool === "extract" || input.tool === "discard") {

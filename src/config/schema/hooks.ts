@@ -59,6 +59,27 @@ export const HookNameSchema = z.enum([
   "fsync-skip-warning",
   "plan-format-validator",
   "legacy-plugin-toast",
+  // Custom hooks
+  "background-result-injection",
+  "mcp-deferred-loader",
+  "micro-compact",
+  "identity-reinjection",
+  "reasoning-content-preserver",
+  "platform-error-filter",
+  "checkpoint-undo",
+  "todo-nag",
+  "path-scoped-rules",
+  // ECC integration hooks
+  "fact-force-gate",
+  "config-protection",
+  "post-edit-diagnostics",
+  "env-injector",
+  "context-monitor",
+  "cost-tracker",
+  "transcript-archival",
+  "continuous-learning-observe",
+  "continuous-learning-consolidate",
+  "continuous-learning-inject",
 ])
 
 export type HookName = z.infer<typeof HookNameSchema>

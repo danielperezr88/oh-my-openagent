@@ -205,6 +205,50 @@ describe("detectErrorType", () => {
     })
   })
 
+  describe("deepseek_reasoning_content_missing errors", () => {
+    it("should detect reasoning_content must be passed back error", () => {
+      const error = {
+        error: {
+          type: "invalid_request_error",
+          message: "The `reasoning_content` in the thinking mode must be passed back to the API.",
+        },
+      }
+
+      const result = detectErrorType(error)
+
+      expect(result).toBe("deepseek_reasoning_content_missing")
+    })
+
+    it("should detect reasoning_content error from nested API error", () => {
+      const error = {
+        data: {
+          error: {
+            message: "The `reasoning_content` in the thinking mode must be passed back to the API.",
+          },
+        },
+      }
+
+      const result = detectErrorType(error)
+
+      expect(result).toBe("deepseek_reasoning_content_missing")
+    })
+
+    it("should detect reasoning_content error from DeepSeek response body", () => {
+      const error = {
+        name: "APIError",
+        data: {
+          message: "The `reasoning_content` in the thinking mode must be passed back to the API.",
+          responseBody: "{\"error\":{\"message\":\"The `reasoning_content` in the thinking mode must be passed back to the API.\",\"type\":\"invalid_request_error\"}}",
+          metadata: { url: "https://api.deepseek.com/chat/completions" },
+        },
+      }
+
+      const result = detectErrorType(error)
+
+      expect(result).toBe("deepseek_reasoning_content_missing")
+    })
+  })
+
   describe("unrecognized errors", () => {
     it("should return null for unrecognized error patterns", () => {
       // given an unrelated error
@@ -363,6 +407,36 @@ describe("thinking-prepend", () => {
     cleanupParts(targetMessageID)
   })
 
+  it("writes unsigned thinking part verbatim for DeepSeek file-backed recovery", () => {
+    const sessionID = "ses_thinking_prepend_sync_unsigned"
+    const targetMessageID = "msg_target_unsigned"
+    const unsignedPart = {
+      id: "prt_prev_unsigned",
+      sessionID,
+      messageID: "msg_prev_unsigned",
+      type: "thinking",
+      thinking: "DeepSeek reasoning content",
+      // No signature field — DeepSeek V4 Pro
+    } as const satisfies StoredPartRecord
+
+    const result = prependThinkingPart(sessionID, targetMessageID, {
+      isSqliteBackend: () => false,
+      patchPart: async () => true,
+      log: mock(() => {}),
+      findLastThinkingPart: () => unsignedPart,
+      findLastThinkingPartFromSDK: async () => null,
+      readTargetPartIDs: () => ["prt_target_text"],
+      readTargetPartIDsFromSDK: async () => [],
+    })
+
+    expect(result).toBe(true)
+    const writtenPath = join(TEST_PART_STORAGE, targetMessageID, `${unsignedPart.id}.json`)
+    expect(existsSync(writtenPath)).toBe(true)
+    expect(JSON.parse(readFileSync(writtenPath, "utf-8"))).toEqual(unsignedPart)
+
+    cleanupParts(targetMessageID)
+  })
+
   it("returns false immediately when sqlite backend is active", () => {
     const result = prependThinkingPart("ses_sqlite", "msg_sqlite", {
       isSqliteBackend: () => true,
@@ -502,6 +576,63 @@ describe("thinking-prepend", () => {
 
     expect(result).toBe(false)
     expect(patchPartMock).toHaveBeenCalledTimes(0)
+  })
+
+  it("patches unsigned thinking part verbatim for DeepSeek SDK-backed recovery", async () => {
+    const prependThinkingPartAsyncUntyped = Reflect.get(
+      { prependThinkingPartAsync },
+      "prependThinkingPartAsync"
+    )
+    const sessionID = "ses_thinking_prepend_async_unsigned"
+    const targetMessageID = "msg_target_async_unsigned"
+    const patchPartMock = mock(async () => true)
+    const unsignedPart = {
+      id: "prt_prev_unsigned_async",
+      type: "thinking",
+      thinking: "DeepSeek reasoning content",
+      // No signature field — DeepSeek V4 Pro
+    } as const
+    const client = {
+      session: {
+        messages: async () => ({
+          data: [
+            {
+              info: { id: "msg_prev_unsigned_async", role: "assistant" },
+              parts: [unsignedPart],
+            },
+            {
+              info: { id: targetMessageID, role: "assistant" },
+              parts: [{ id: "prt_target_text", type: "text", text: "tool result" }],
+            },
+          ],
+        }),
+      },
+    }
+
+    const result = await Reflect.apply(prependThinkingPartAsyncUntyped, undefined, [
+      client,
+      sessionID,
+      targetMessageID,
+      {
+        isSqliteBackend: () => false,
+        patchPart: patchPartMock,
+        log: mock(() => {}),
+        findLastThinkingPart: () => null,
+        findLastThinkingPartFromSDK: async () => unsignedPart,
+        readTargetPartIDs: () => [],
+        readTargetPartIDsFromSDK: async () => ["prt_target_text"],
+      },
+    ])
+
+    expect(result).toBe(true)
+    expect(patchPartMock).toHaveBeenCalledTimes(1)
+    expect(patchPartMock.mock.calls[0]).toEqual([
+      client,
+      sessionID,
+      targetMessageID,
+      "prt_prev_unsigned_async",
+      unsignedPart,
+    ])
   })
 
   it("returns false when the sdk reused signed thinking part would not sort before target parts", async () => {

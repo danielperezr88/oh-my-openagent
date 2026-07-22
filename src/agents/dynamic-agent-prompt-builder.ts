@@ -29,3 +29,10 @@ export {
   buildUltraworkSection,
   buildAntiDuplicationSection,
 } from "./dynamic-agent-policy-sections"
+
+export {
+  buildDocStoreSection,
+  buildDocStoreLibrarianExtension,
+  buildDocStoreAwarenessBrief,
+  buildDocStoreAwarenessWithActions,
+} from "./dynamic-agent-doc-store-section"

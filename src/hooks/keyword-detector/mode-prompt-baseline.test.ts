@@ -20,26 +20,26 @@ const MODE_PROMPT_BASELINES: readonly PromptBaseline[] = [
   {
     name: "search",
     message: SEARCH_MESSAGE,
-    sha256: "aa38d1011edcf083394441321564330661868411ec13b575e5994812fae27f62",
-    byteLength: 311,
+    sha256: "1bac446cca412182c4ddee143038952426b03ea60d727f8a4e025d4d0405edaf",
+    byteLength: 317,
   },
   {
     name: "analyze",
     message: ANALYZE_MESSAGE,
-    sha256: "63f9de6f7afb67ab68bc4abcc7e78c8450a6ce556378a7a5d2b9061a3c519d7f",
-    byteLength: 865,
+    sha256: "d6549369964eed6938dba116686d1f6b4ea745c8fa0ea564dce1742a283e5a95",
+    byteLength: 881,
   },
   {
     name: "team",
     message: TEAM_MESSAGE,
-    sha256: "21fd4110835ce380e307cf29e132753b04a58758b86cfaaf5dda26e0e3193d69",
-    byteLength: 614,
+    sha256: "f93c457ded32f94da2860a7a847fe7fa7d6fe2e465742fdcdb006695f62e9bda",
+    byteLength: 616,
   },
   {
     name: "hyperplan",
     message: HYPERPLAN_MESSAGE,
-    sha256: "cea6f378370c736909be99bd9a66a06db1e4819848336dd7951298e949270ced",
-    byteLength: 1500,
+    sha256: "7b6fc1db3852642467551d87687e9cf14a2c46a39d474eb66005b512d4315792",
+    byteLength: 1525,
   },
 ]
 

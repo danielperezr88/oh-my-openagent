@@ -1,6 +1,7 @@
 import type { HookName, OhMyOpenCodeConfig } from "../../config"
 import type { BackgroundManager } from "../../features/background-agent"
 import type { ModelFallbackControllerAccessor } from "../../hooks/model-fallback"
+import type { McpDeferredRegistry } from "../../hooks/mcp-deferred-loader"
 import type { PluginContext } from "../types"
 import type { ModelCacheState } from "../../plugin-state"
 
@@ -16,8 +17,10 @@ export function createCoreHooks(args: {
   modelFallbackControllerAccessor?: ModelFallbackControllerAccessor
   isHookEnabled: (hookName: HookName) => boolean
   safeHookEnabled: boolean
+  mcpDeferredRegistry?: McpDeferredRegistry
+  client?: PluginContext["client"]
 }) {
-  const { ctx, pluginConfig, modelCacheState, backgroundManager, modelFallbackControllerAccessor, isHookEnabled, safeHookEnabled } = args
+  const { ctx, pluginConfig, modelCacheState, backgroundManager, modelFallbackControllerAccessor, isHookEnabled, safeHookEnabled, mcpDeferredRegistry, client } = args
 
   const session = createSessionHooks({
     ctx,
@@ -43,6 +46,9 @@ export function createCoreHooks(args: {
     isHookEnabled: (name) => isHookEnabled(name as HookName),
     safeHookEnabled,
     ralphLoop: session.ralphLoop,
+    mcpDeferredRegistry,
+    client,
+    backgroundManager,
   })
 
   return {

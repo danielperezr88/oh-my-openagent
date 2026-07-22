@@ -22,6 +22,22 @@ export const ExperimentalConfigSchema = z.object({
   model_fallback_title: z.boolean().optional(),
   /** Maximum number of tools to register. When set, lower-priority tools are excluded to stay within provider limits (e.g., OpenAI's 128-tool cap). Accounts for ~20 OpenCode built-in tools. */
   max_tools: z.number().int().min(1).optional(),
+  /** Enable task DAG enforcement: block starting tasks with unresolved dependencies, cascade completion, detect cycles. Default: false. */
+  task_dag: z.boolean().optional(),
+  /** Enable deferred MCP tool loading: stub MCP tool schemas and provide discover_tools for on-demand discovery. Default: false. */
+  mcp_deferred_loading: z.union([
+    z.boolean(),
+    z.object({
+      /** Enable deferred loading */
+      enabled: z.boolean(),
+      /** @deprecated Semantic search uses local embeddings by default. This URL is no longer needed. */
+      semantic_url: z.string().optional(),
+      /** MCP server names that should never be deferred (always load full schemas) */
+      always_load: z.array(z.string()).optional(),
+      /** Custom stub description for deferred tools */
+      stub_description: z.string().optional(),
+    }),
+  ]).optional(),
 })
 
 export type ExperimentalConfig = z.infer<typeof ExperimentalConfigSchema>

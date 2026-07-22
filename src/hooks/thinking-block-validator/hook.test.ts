@@ -106,12 +106,12 @@ describe("createThinkingBlockValidatorHook", () => {
     expect(messages[1]?.parts).toEqual([{ type: "text", text: "continue" }])
   })
 
-  it("skips hook when no signed history exists", async () => {
+  it("skips hook when no thinking blocks exist in history", async () => {
     //#given
     const messages = [
       {
         info: { role: "assistant" },
-        parts: [{ type: "thinking", thinking: "draft" }],
+        parts: [{ type: "text", text: "response" }],
       },
       {
         info: { role: "assistant" },
@@ -180,5 +180,157 @@ describe("createThinkingBlockValidatorHook", () => {
     //#then
     expect(messages[1]?.parts[0]).toBe(leadingRedactedThinkingPart)
     expect(messages[1]?.parts).toHaveLength(2)
+  })
+
+  // DeepSeek V4 Pro — unsigned thinking blocks (no signature)
+
+  it("skips injection for unsigned DeepSeek-style thinking blocks (no signature)", async () => {
+    // Unsigned thinking blocks lack the Anthropic signature required for API
+    // validation.  Injecting them would cause a guaranteed API rejection, so the
+    // hook deliberately skips them.
+    //#given
+    const unsignedThinkingPart: TestPart = {
+      type: "thinking",
+      thinking: "DeepSeek reasoning content",
+      // No signature field — DeepSeek V4 Pro via Anthropic-compatible API
+    }
+    const messages = [
+      {
+        info: { role: "assistant" },
+        parts: [unsignedThinkingPart],
+      },
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "tool_use" }],
+      },
+    ] satisfies TestMessage[]
+
+    //#when
+    await runTransform(messages)
+
+    //#then
+    expect(messages[1]?.parts).toEqual([{ type: "tool_use" }])
+  })
+
+  it("skips injection when history has unsigned thinking only (no signature)", async () => {
+    // Unsigned thinking blocks cannot pass Anthropic signature validation,
+    // so the hook skips injection entirely rather than risk API rejection.
+    //#given
+    const unsignedThinkingPart: TestPart = {
+      type: "thinking",
+      thinking: "draft",
+    }
+    const messages = [
+      {
+        info: { role: "assistant" },
+        parts: [unsignedThinkingPart],
+      },
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "text", text: "continue" }],
+      },
+    ] satisfies TestMessage[]
+
+    //#when
+    await runTransform(messages)
+
+    //#then
+    expect(messages[1]?.parts).toEqual([{ type: "text", text: "continue" }])
+  })
+
+  it("skips injection when missing thinking block follows system directive (DeepSeek unsigned)", async () => {
+    // Unsigned thinking blocks cannot pass Anthropic signature validation.
+    // When the only available thinking block is unsigned (no signature), the
+    // hook cannot safely inject it, even after a system directive injection.
+    //#given
+    const thinkingPart: TestPart = {
+      type: "thinking",
+      thinking: "reasoning about the code",
+    }
+    const messages = [
+      {
+        info: { role: "assistant" },
+        parts: [thinkingPart, { type: "tool_use" }],
+      },
+      {
+        info: { role: "user" },
+        parts: [{ type: "text", text: "[SYSTEM DIRECTIVE: OH-MY-OPENCODE - TODO CONTINUATION] Check todos" }],
+      },
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "tool_use" }], // Missing leading thinking block
+      },
+    ] satisfies TestMessage[]
+
+    //#when
+    await runTransform(messages)
+
+    //#then
+    expect(messages[2]?.parts).toEqual([{ type: "tool_use" }])
+  })
+
+  it("skips synthetic unsigned thinking blocks", async () => {
+    //#given
+    const syntheticUnsignedPart: TestPart = {
+      type: "thinking",
+      thinking: "synthetic draft",
+      synthetic: true,
+      // No signature — unsigned but synthetic
+    }
+    const messages = [
+      {
+        info: { role: "assistant" },
+        parts: [syntheticUnsignedPart],
+      },
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "text", text: "continue" }],
+      },
+    ] satisfies TestMessage[]
+
+    //#when
+    await runTransform(messages)
+
+    //#then
+    expect(messages[1]?.parts).toEqual([{ type: "text", text: "continue" }])
+  })
+
+  it("prefers signed thinking block over unsigned when both exist", async () => {
+    // When history contains both signed and unsigned thinking blocks, only the
+    // signed block can be safely injected (unsigned blocks fail Anthropic API
+    // signature validation). The hook finds the most recent SIGNED block.
+    //#given
+    const signedThinkingPart: TestPart = {
+      type: "thinking",
+      thinking: "signed plan",
+      signature: "valid-signature",
+    }
+    const unsignedThinkingPart: TestPart = {
+      type: "thinking",
+      thinking: "unsigned plan",
+    }
+    const messages = [
+      {
+        info: { role: "assistant" },
+        parts: [signedThinkingPart],
+      },
+      {
+        info: { role: "assistant" },
+        parts: [unsignedThinkingPart],
+      },
+      {
+        info: { role: "assistant" },
+        parts: [{ type: "tool_use" }],
+      },
+    ] satisfies TestMessage[]
+
+    //#when
+    await runTransform(messages)
+
+    //#then
+    // The signed block from message 0 is the only one eligible for injection.
+    // The unsigned block in message 1 is skipped (no valid signature).
+    expect(messages[2]?.parts[0]).toBe(signedThinkingPart)
+    expect(messages[2]?.parts).toHaveLength(2)
   })
 })

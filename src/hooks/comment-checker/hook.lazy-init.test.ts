@@ -16,6 +16,7 @@ mock.module("./pending-calls", () => ({
   startPendingCallCleanup,
   stopPendingCallCleanup: () => {},
   takePendingCall: () => undefined,
+  _testReset: () => {},
 }))
 
 afterAll(() => {

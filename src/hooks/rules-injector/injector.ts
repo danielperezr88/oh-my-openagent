@@ -266,9 +266,9 @@ export function createRuleInjectionProcessor(deps: {
 				if (isDuplicateByContentHashImpl(contentHash, cache.contentHashes))
 					continue;
 
-				const relativePath = projectRoot
+				const relativePath = (projectRoot
 					? relative(projectRoot, candidate.path)
-					: candidate.path;
+					: candidate.path).replace(/\\/g, "/");
 
 				if (transcriptRelativePaths.has(relativePath)) {
 					// Rule banner already present in the live transcript - record it in

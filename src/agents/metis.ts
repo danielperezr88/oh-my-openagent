@@ -2,6 +2,7 @@ import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentMode, AgentPromptMetadata } from "./types"
 import { buildAntiDuplicationSection } from "./dynamic-agent-prompt-builder"
 import { createAgentToolRestrictions } from "../shared/permission-compat"
+import { buildDocStoreAwarenessBrief } from "./dynamic-agent-doc-store-section"
 
 const MODE: AgentMode = "subagent"
 
@@ -290,6 +291,8 @@ call_omo_agent(subagent_type="librarian", prompt="I'm looking for proven impleme
 - Provide actionable directives for Prometheus
 - Include QA automation directives in every output
 - Ensure acceptance criteria are agent-executable (commands, not human actions)
+
+${buildDocStoreAwarenessBrief()}
 `
 
 const metisRestrictions = createAgentToolRestrictions([

@@ -19,6 +19,7 @@ import {
   type PermissionValue,
 } from "../../shared/permission-compat"
 import { getGptApplyPatchPermission } from "../gpt-apply-patch-guard"
+import { buildDocStoreAwarenessWithActions } from "../dynamic-agent-doc-store-section"
 
 import { buildDefaultSisyphusJuniorPrompt } from "./default"
 import { buildKimiK26SisyphusJuniorPrompt } from "./kimi-k2-6"
@@ -76,20 +77,20 @@ export function buildSisyphusJuniorPrompt(
 
   switch (source) {
     case "kimi-k2":
-      return buildKimiK26SisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return buildKimiK26SisyphusJuniorPrompt(useTaskSystem, promptAppend) + "\n\n" + buildDocStoreAwarenessWithActions()
     case "gpt-5-5":
-      return buildGpt55SisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return buildGpt55SisyphusJuniorPrompt(useTaskSystem, promptAppend) + "\n\n" + buildDocStoreAwarenessWithActions()
     case "gpt-5-4":
-      return buildGpt54SisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return buildGpt54SisyphusJuniorPrompt(useTaskSystem, promptAppend) + "\n\n" + buildDocStoreAwarenessWithActions()
     case "gpt-5-3-codex":
-      return buildGpt53CodexSisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return buildGpt53CodexSisyphusJuniorPrompt(useTaskSystem, promptAppend) + "\n\n" + buildDocStoreAwarenessWithActions()
     case "gpt":
-      return buildGptSisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return buildGptSisyphusJuniorPrompt(useTaskSystem, promptAppend) + "\n\n" + buildDocStoreAwarenessWithActions()
     case "gemini":
-      return buildGeminiSisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return buildGeminiSisyphusJuniorPrompt(useTaskSystem, promptAppend) + "\n\n" + buildDocStoreAwarenessWithActions()
     case "default":
     default:
-      return buildDefaultSisyphusJuniorPrompt(useTaskSystem, promptAppend)
+      return buildDefaultSisyphusJuniorPrompt(useTaskSystem, promptAppend) + "\n\n" + buildDocStoreAwarenessWithActions()
   }
 }
 

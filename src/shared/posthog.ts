@@ -45,7 +45,7 @@ const DEFAULT_POSTHOG_API_KEY = "phc_CFJhj5HyvA62QPhvyaUCtaq23aUfznnijg5VaaGkNk7
 
 type PostHogCaptureEvent = Parameters<PostHog["capture"]>[0]
 type PostHogSource = "cli" | "plugin"
-type PostHogActivityReason = "run_started"
+type PostHogActivityReason = "run_started" | "plugin_loaded"
 
 type PostHogClient = {
   trackActive: (distinctId: string, reason: PostHogActivityReason) => void

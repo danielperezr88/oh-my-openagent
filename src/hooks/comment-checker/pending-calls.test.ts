@@ -1,5 +1,10 @@
 import { describe, test, expect } from "bun:test"
 import { unsafeTestValue } from "../../../test-support/unsafe-test-value"
+import {
+  startPendingCallCleanup,
+  stopPendingCallCleanup,
+  _testReset,
+} from "./pending-calls"
 
 describe("pending-calls cleanup interval", () => {
   test("starts cleanup once and unrefs timer", async () => {
@@ -22,18 +27,18 @@ describe("pending-calls cleanup interval", () => {
     }))
 
     try {
-      const modulePath = new URL("./pending-calls.ts", import.meta.url).pathname
-      const pendingCallsModule = await import(`${modulePath}?pending-calls-test-once`)
+      _testReset()
 
       //#when
-      pendingCallsModule.startPendingCallCleanup()
-      pendingCallsModule.startPendingCallCleanup()
+      startPendingCallCleanup()
+      startPendingCallCleanup()
 
       //#then
       expect(setIntervalCalls).toEqual([10_000])
       expect(unrefCalled).toBe(1)
     } finally {
       globalThis.setInterval = originalSetInterval
+      _testReset()
     }
   })
 
@@ -60,19 +65,19 @@ describe("pending-calls cleanup interval", () => {
     }))
 
     try {
-      const modulePath = new URL("./pending-calls.ts", import.meta.url).pathname
-      const pendingCallsModule = await import(`${modulePath}?pending-calls-test-stop`)
-      pendingCallsModule.startPendingCallCleanup()
+      _testReset()
+      startPendingCallCleanup()
 
       //#when
-      pendingCallsModule.stopPendingCallCleanup()
-      pendingCallsModule.startPendingCallCleanup()
+      stopPendingCallCleanup()
+      startPendingCallCleanup()
 
       //#then
       expect(clearCalls).toBe(1)
     } finally {
       globalThis.setInterval = originalSetInterval
       globalThis.clearInterval = originalClearInterval
+      _testReset()
     }
   })
 })

@@ -93,6 +93,10 @@ export function createToolExecuteBeforeHandler(args: {
     await hooks.atlasHook?.["tool.execute.before"]?.(input, output)
     await hooks.compactionTodoPreserver?.["tool.execute.before"]?.(input, output)
     await hooks.teamToolGating?.["tool.execute.before"]?.(input, output)
+    await hooks.continuousLearningObserve?.["tool.execute.before"]?.(input, output)
+    await hooks.factForceGate?.["tool.execute.before"]?.(input, output)
+    await hooks.configProtection?.["tool.execute.before"]?.(input, output)
+    await hooks.contextMonitor?.["tool.execute.before"]?.(input, output)
 
     const normalizedToolName = input.tool.toLowerCase()
     if (

@@ -240,6 +240,33 @@ export function createMessagesTransformHandler(args: {
       output,
     )
 
+    await runMessagesTransformHookSafely(
+      "mcpDeferredLoader",
+      args.hooks.mcpDeferredLoader?.[
+        "experimental.chat.messages.transform"
+      ],
+      input,
+      output,
+    )
+
+    await runMessagesTransformHookSafely(
+      "contextMonitor",
+      args.hooks.contextMonitor?.[
+        "experimental.chat.messages.transform"
+      ],
+      input,
+      output,
+    )
+
+    await runMessagesTransformHookSafely(
+      "continuousLearningInject",
+      args.hooks.continuousLearningInject?.[
+        "experimental.chat.messages.transform"
+      ],
+      input,
+      output,
+    )
+
     ensureUserTurnAfterAssistantTail(output)
   }
 }

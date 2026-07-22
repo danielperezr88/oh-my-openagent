@@ -1,6 +1,8 @@
 import type { OhMyOpenCodeConfig } from "../../config"
+import type { BackgroundManager } from "../../features/background-agent"
 import type { PluginContext } from "../types"
 import type { RalphLoopHook } from "../../hooks/ralph-loop"
+import type { McpDeferredRegistry } from "../../hooks/mcp-deferred-loader"
 
 import {
   createClaudeCodeHooksHook,
@@ -10,10 +12,19 @@ import {
   createThinkingBlockValidatorHook,
   createToolPairValidatorHook,
 } from "../../hooks"
+import { createBackgroundResultInjectionHook } from "../../hooks/background-result-injection"
+import { createMcpDeferredLoaderHook } from "../../hooks/mcp-deferred-loader"
+import { createIdentityReinjectionHook } from "../../hooks/identity-reinjection"
+import { createMicroCompactHook } from "../../hooks/micro-compact"
+import { createPlatformErrorFilterHook } from "../../hooks/platform-error-filter/hook"
+import { createReasoningContentPreserverHook } from "../../hooks/reasoning-content-preserver/hook"
 import {
   contextCollector,
   createContextInjectorMessagesTransformHook,
 } from "../../features/context-injector"
+import { createContextMonitorHook } from "../../features/ecc-integration/context-monitor"
+import { createCostTrackerHook } from "../../features/ecc-integration/cost-tracker"
+import { createInstinctInjectorHook } from "../../features/ecc-integration/continuous-learning/injection/instinct-injector"
 import { safeCreateHook } from "../../shared/safe-create-hook"
 
 export type TransformHooks = {
@@ -24,6 +35,16 @@ export type TransformHooks = {
   teamMailboxInjector: ReturnType<typeof createTeamMailboxInjector> | null
   thinkingBlockValidator: ReturnType<typeof createThinkingBlockValidatorHook> | null
   toolPairValidator: ReturnType<typeof createToolPairValidatorHook> | null
+  // Custom transform hooks
+  backgroundResultInjection: ReturnType<typeof createBackgroundResultInjectionHook> | null
+  mcpDeferredLoader: ReturnType<typeof createMcpDeferredLoaderHook> | null
+  microCompact: ReturnType<typeof createMicroCompactHook> | null
+  identityReinjection: ReturnType<typeof createIdentityReinjectionHook> | null
+  reasoningContentPreserver: ReturnType<typeof createReasoningContentPreserverHook> | null
+  platformErrorFilter: ReturnType<typeof createPlatformErrorFilterHook> | null
+  contextMonitor: ReturnType<typeof createContextMonitorHook> | null
+  costTracker: ReturnType<typeof createCostTrackerHook> | null
+  continuousLearningInject: ReturnType<typeof createInstinctInjectorHook> | null
 }
 
 export function createTransformHooks(args: {
@@ -32,8 +53,11 @@ export function createTransformHooks(args: {
   isHookEnabled: (hookName: string) => boolean
   safeHookEnabled?: boolean
   ralphLoop?: RalphLoopHook | null
+  mcpDeferredRegistry?: McpDeferredRegistry
+  client?: PluginContext["client"]
+  backgroundManager?: BackgroundManager
 }): TransformHooks {
-  const { ctx, pluginConfig, isHookEnabled, ralphLoop } = args
+  const { ctx, pluginConfig, isHookEnabled, ralphLoop, mcpDeferredRegistry, client, backgroundManager } = args
   const safeHookEnabled = args.safeHookEnabled ?? true
 
   const claudeCodeHooks = isHookEnabled("claude-code-hooks")
@@ -104,6 +128,67 @@ export function createTransformHooks(args: {
       )
     : null
 
+  // Custom transform hooks
+  const backgroundResultInjection = isHookEnabled("background-result-injection") && backgroundManager
+    ? safeCreateHook(
+        "background-result-injection",
+        () => createBackgroundResultInjectionHook(backgroundManager),
+        { enabled: safeHookEnabled },
+      )
+    : null
+
+  const mcpDeferredLoaderHook = mcpDeferredRegistry
+    ? safeCreateHook(
+        "mcp-deferred-loader",
+        () => createMcpDeferredLoaderHook(mcpDeferredRegistry),
+        { enabled: safeHookEnabled },
+      )
+    : null
+
+  const microCompact = isHookEnabled("micro-compact")
+    ? safeCreateHook(
+        "micro-compact",
+        () => createMicroCompactHook(),
+        { enabled: safeHookEnabled },
+      )
+    : null
+
+  const identityReinjection = isHookEnabled("identity-reinjection")
+    ? safeCreateHook(
+        "identity-reinjection",
+        () => createIdentityReinjectionHook(),
+        { enabled: safeHookEnabled },
+      )
+    : null
+
+  const reasoningContentPreserver = client
+    ? safeCreateHook(
+        "reasoning-content-preserver",
+        () => createReasoningContentPreserverHook(client),
+        { enabled: safeHookEnabled },
+      )
+    : null
+
+  const platformErrorFilter = isHookEnabled("platform-error-filter")
+    ? safeCreateHook(
+        "platform-error-filter",
+        () => createPlatformErrorFilterHook(),
+        { enabled: safeHookEnabled },
+      )
+    : null
+
+  const contextMonitor = isHookEnabled("context-monitor")
+    ? safeCreateHook("context-monitor", () => createContextMonitorHook(), { enabled: safeHookEnabled })
+    : null
+
+  const costTracker = isHookEnabled("cost-tracker")
+    ? safeCreateHook("cost-tracker", () => createCostTrackerHook(), { enabled: safeHookEnabled })
+    : null
+
+  const continuousLearningInject = isHookEnabled("continuous-learning-inject")
+    ? safeCreateHook("continuous-learning-inject", () => createInstinctInjectorHook(), { enabled: safeHookEnabled })
+    : null
+
   return {
     claudeCodeHooks,
     keywordDetector,
@@ -112,5 +197,14 @@ export function createTransformHooks(args: {
     teamMailboxInjector,
     thinkingBlockValidator,
     toolPairValidator,
+    backgroundResultInjection,
+    mcpDeferredLoader: mcpDeferredLoaderHook,
+    microCompact,
+    identityReinjection,
+    reasoningContentPreserver,
+    platformErrorFilter,
+    contextMonitor,
+    costTracker,
+    continuousLearningInject,
   }
 }

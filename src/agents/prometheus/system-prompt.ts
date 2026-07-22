@@ -1,5 +1,6 @@
 import { loadPromptSync, prometheusPromptVariants } from "@oh-my-opencode/prompts-core"
 import { isGptModel, isGeminiModel } from "../types"
+import { buildDocStoreAwarenessBrief } from "../dynamic-agent-doc-store-section"
 
 export type PrometheusPromptSource = "default" | "gpt" | "gemini"
 
@@ -31,5 +32,5 @@ export function getPrometheusPromptSource(model?: string): PrometheusPromptSourc
 export function getPrometheusPrompt(model?: string, disabledTools?: readonly string[]): string {
   const variant = getPrometheusPromptSource(model)
   const body = loadPrometheusVariant(variant)
-  return disabledTools?.includes("question") ? body.replace(QUESTION_TOOL_BLOCK_RE, "") : body
+  return (disabledTools?.includes("question") ? body.replace(QUESTION_TOOL_BLOCK_RE, "") : body) + "\n\n" + buildDocStoreAwarenessBrief()
 }

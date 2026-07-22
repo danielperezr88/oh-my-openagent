@@ -94,7 +94,7 @@ describe("runCliInstaller", () => {
       }),
       spyOn(configManager, "writeOmoConfig").mockReturnValue({
         success: true,
-        configPath: "/tmp/oh-my-opencode.jsonc",
+        configPath: "/tmp/oh-openagent-my-openagent.jsonc",
       }),
     ]
 

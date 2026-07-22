@@ -62,7 +62,7 @@ afterAll(async () => {
 	}
 })
 
-describe("runTmuxCommand", () => {
+describe.skipIf(process.platform === "win32")("runTmuxCommand", () => {
 	test("#given cmux socket and real tmux session #when run #then uses requested executable instead of cmux compat", async () => {
 		// given
 		const originalCmuxSocketPath = process.env.CMUX_SOCKET_PATH

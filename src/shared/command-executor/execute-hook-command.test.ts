@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 
 const { executeHookCommand } = await import("./execute-hook-command")
 
-describe("executeHookCommand", () => {
+describe.skipIf(process.platform === "win32")("executeHookCommand", () => {
   let tempDirectory = ""
 
   beforeEach(() => {

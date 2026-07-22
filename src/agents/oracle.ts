@@ -2,6 +2,7 @@ import type { AgentConfig } from "@opencode-ai/sdk";
 import type { AgentMode, AgentPromptMetadata } from "./types";
 import { isGpt5_2Model, isGpt5_5Model, isGptModel } from "./types";
 import { createAgentToolRestrictions } from "../shared/permission-compat";
+import { buildDocStoreAwarenessBrief } from "./dynamic-agent-doc-store-section";
 
 const MODE: AgentMode = "subagent";
 
@@ -150,7 +151,9 @@ Before finalizing answers on architecture, security, or performance:
 
 <delivery>
 Your response goes directly to the user with no intermediate processing. Make your final message self-contained: a clear recommendation they can act on immediately, covering both what to do and why.
-</delivery>`;
+</delivery>
+
+${buildDocStoreAwarenessBrief()}`;
 
 /**
  * GPT-5.4 Optimized Oracle System Prompt
@@ -240,7 +243,9 @@ Before finalizing answers on architecture, security, or performance: re-scan for
 
 <delivery>
 Your response goes directly to the user with no intermediate processing. Make your final message self-contained: a clear recommendation they can act on immediately, covering both what to do and why. Dense and useful beats long and thorough. Deliver actionable insight, not exhaustive analysis.
-</delivery>`;
+</delivery>
+
+${buildDocStoreAwarenessBrief()}`;
 
 /**
  * GPT-5.2 Optimized Oracle System Prompt
@@ -371,7 +376,9 @@ For security-sensitive answers, hedge appropriately and recommend a second opini
 
 <delivery>
 Your response goes directly to the calling agent with no intermediate processing. Make the message self-contained: a clear recommendation they can act on immediately, covering both what to do and why. Dense and useful beats long and thorough. Never summarize what the agent already knows; skip to what is new. A senior engineer scanning your answer in 60 seconds should come away with the recommendation, the plan, the effort, and the key risks - anything that does not serve that scan is cost, not value.
-</delivery>`;
+</delivery>
+
+${buildDocStoreAwarenessBrief()}`;
 
 const ORACLE_GPT_5_5_PROMPT = `You are Oracle, a strategic technical advisor based on GPT-5.5. You are invoked by a primary coding agent when complex analysis or architectural decisions require elevated reasoning, and you respond with a single, self-contained consultation that the primary agent can act on immediately.
 
@@ -536,6 +543,8 @@ Your interaction surface is one consultation at a time, with optional follow-ups
 When the consulting agent continues the session with a follow-up question, answer efficiently. You still have the context from the original consultation; do not re-establish it, do not recap unless they ask. Answer the new question directly, adjusting the earlier recommendation only if the follow-up reveals new information that changes it.
 
 If the follow-up contradicts what you recommended and you still believe the original recommendation, say so clearly and explain the disagreement. Your job is not to agree; it is to give the best recommendation.
+
+${buildDocStoreAwarenessBrief()}
 `;
 
 export function createOracleAgent(model: string): AgentConfig {

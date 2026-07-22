@@ -66,7 +66,7 @@ describe("extractVersionFromPluginEntry", () => {
   })
 
   it("extracts version from legacy plugin entry", () => {
-    const version = extractVersionFromPluginEntry("oh-my-opencode@3.14.0")
+    const version = extractVersionFromPluginEntry("oh-openagent-my-openagent@3.14.0")
     expect(version).toBe("3.14.0")
   })
 

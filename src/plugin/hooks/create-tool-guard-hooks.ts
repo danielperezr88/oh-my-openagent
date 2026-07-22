@@ -23,6 +23,12 @@ import {
   createPlanFormatValidatorHook,
 } from "../../hooks"
 import {
+  createFactForceGateHook,
+  createConfigProtectionHook,
+  createPostEditDiagnosticsHook,
+} from "../../features/ecc-integration/quality-hooks"
+import { createObservationRecorderHook } from "../../features/ecc-integration/continuous-learning/observation/recorder"
+import {
   getOpenCodeVersion,
   isOpenCodeVersionAtLeast,
   log,
@@ -49,6 +55,10 @@ export type ToolGuardHooks = {
   teamToolGating: ReturnType<typeof createTeamToolGating> | null
   notepadWriteGuard: ReturnType<typeof createNotepadWriteGuardHook> | null
   planFormatValidator: ReturnType<typeof createPlanFormatValidatorHook> | null
+  factForceGate: ReturnType<typeof createFactForceGateHook> | null
+  configProtection: ReturnType<typeof createConfigProtectionHook> | null
+  postEditDiagnostics: ReturnType<typeof createPostEditDiagnosticsHook> | null
+  continuousLearningObserve: ReturnType<typeof createObservationRecorderHook> | null
 }
 
 export function createToolGuardHooks(args: {
@@ -157,6 +167,22 @@ export function createToolGuardHooks(args: {
     ? safeHook("notepad-write-guard", () => createNotepadWriteGuardHook())
     : null
 
+  const factForceGate = isHookEnabled("fact-force-gate")
+    ? safeHook("fact-force-gate", () => createFactForceGateHook())
+    : null
+
+  const configProtection = isHookEnabled("config-protection")
+    ? safeHook("config-protection", () => createConfigProtectionHook())
+    : null
+
+  const postEditDiagnostics = isHookEnabled("post-edit-diagnostics")
+    ? safeHook("post-edit-diagnostics", () => createPostEditDiagnosticsHook())
+    : null
+
+  const continuousLearningObserve = isHookEnabled("continuous-learning-observe")
+    ? safeHook("continuous-learning-observe", () => createObservationRecorderHook())
+    : null
+
   return {
     commentChecker,
     toolOutputTruncator,
@@ -176,5 +202,9 @@ export function createToolGuardHooks(args: {
     teamToolGating,
     notepadWriteGuard,
     planFormatValidator,
+    factForceGate,
+    configProtection,
+    postEditDiagnostics,
+    continuousLearningObserve,
   }
 }

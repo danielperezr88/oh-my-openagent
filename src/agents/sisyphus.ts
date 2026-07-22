@@ -51,6 +51,7 @@ import {
   buildParallelDelegationSection,
   buildNonClaudePlannerSection,
   buildAntiDuplicationSection,
+  buildDocStoreSection,
   categorizeTools,
 } from "./dynamic-agent-prompt-builder";
 
@@ -70,6 +71,7 @@ function buildDynamicSisyphusPrompt(
   );
   const exploreSection = buildExploreSection(availableAgents);
   const librarianSection = buildLibrarianSection(availableAgents);
+  const docStoreSection = buildDocStoreSection();
   const categorySkillsGuide = buildCategorySkillsDelegationGuide(
     availableCategories,
     availableSkills,
@@ -229,6 +231,8 @@ ${toolSelection}
 ${exploreSection}
 
 ${librarianSection}
+
+${docStoreSection}
 
 ### Parallel Execution (DEFAULT behavior)
 

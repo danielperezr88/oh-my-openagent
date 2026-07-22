@@ -2,6 +2,7 @@ import { createWebsearchConfig } from "./websearch"
 import { context7 } from "./context7"
 import { grep_app } from "./grep-app"
 import { createAstGrepMcpConfig } from "./ast-grep"
+import { createAstrolabeMcpConfig } from "./astrolabe"
 import { createLspMcpConfig, type LocalMcpConfig } from "./lsp"
 import type { RuntimeExecutableResolver } from "./runtime-executable"
 import type { OhMyOpenCodeConfig } from "../config/schema"
@@ -51,6 +52,15 @@ export function createBuiltinMcps(disabledMcps: string[] = [], config?: OhMyOpen
       disabledTools: config?.disabled_tools,
       resolveExecutable: options.resolveExecutable,
     })
+  }
+
+  if (!disabledMcps.includes("astrolabe")) {
+    const astrolabeConfig = createAstrolabeMcpConfig({
+      resolveExecutable: options.resolveExecutable,
+    })
+    if (astrolabeConfig) {
+      mcps.astrolabe = astrolabeConfig
+    }
   }
 
   return mcps

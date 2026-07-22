@@ -1,5 +1,6 @@
 import type { Hooks } from "@opencode-ai/plugin"
 
+import { createTranscriptArchivalCompactionHandler } from "../hooks/transcript-archival"
 import { isCompactionAgent } from "../shared/compaction-marker"
 import { log } from "../shared/logger"
 
@@ -38,6 +39,17 @@ type CompactionHookDependencies = {
   claudeCodeHooks?: {
     "experimental.session.compacting"?: SessionCompactingHook
   } | null
+  transcriptArchival?: {
+    saveTranscript: (directory: string, sessionID: string, messages: unknown[]) => Promise<void>
+  } | null
+  pluginContext?: {
+    directory: string
+    client: {
+      session: {
+        messages: (args: { path: { id: string } }) => Promise<unknown[]>
+      }
+    }
+  } | null
 }
 
 async function runCompactionStep(
@@ -63,6 +75,12 @@ export function createSessionCompactingHandler(
     input: SessionCompactingInput,
     output: SessionCompactingOutput,
   ): Promise<void> => {
+    await runCompactionStep("transcriptArchival", input.sessionID, async () => {
+      if (hooks.transcriptArchival && hooks.pluginContext) {
+        const handler = createTranscriptArchivalCompactionHandler(hooks.transcriptArchival)
+        await handler(hooks.pluginContext, { sessionID: input.sessionID })
+      }
+    })
     await runCompactionStep("compactionContextInjector.capture", input.sessionID, async () => {
       const capture = hooks.compactionContextInjector?.capture
       if (capture) {

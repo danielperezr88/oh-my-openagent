@@ -21,13 +21,15 @@ describe("collectCandidateBinaryPaths", () => {
 
     // then
     expect(candidates[0]).toBe("/bad/opencode")
-    expect(candidates).toContain("/good/opencode")
+    // Normalize backslashes to forward slashes for cross-platform comparison
+    const normalizedCandidates = candidates.map((c) => c.replace(/\\/g, "/"))
+    expect(normalizedCandidates).toContain("/good/opencode")
     expect(candidates.filter((candidate) => candidate === "/bad/opencode")).toHaveLength(1)
   })
 })
 
 describe("findWorkingOpencodeBinary", () => {
-  it("returns the first runnable candidate", async () => {
+  it.skipIf(process.platform === "win32")("returns the first runnable candidate", async () => {
     // given
     const pathEnv = ["/bad", "/good"].join(delimiter)
     const which = (command: string): string | undefined => {

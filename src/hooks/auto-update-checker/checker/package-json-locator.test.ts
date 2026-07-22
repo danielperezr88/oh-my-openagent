@@ -24,6 +24,15 @@ describe("findPackageJsonUp", () => {
     expect(found).toBe(pkgPath)
   })
 
+  it("finds a package.json whose name is the published oh-my-openagent", () => {
+    const pkgPath = join(workdir, "package.json")
+    writeFileSync(pkgPath, JSON.stringify({ name: "oh-my-openagent", version: "3.16.0" }))
+
+    const found = findPackageJsonUp(workdir)
+
+    expect(found).toBe(pkgPath)
+  })
+
   it("finds a package.json whose name is the aliased oh-my-openagent (GH-3257)", () => {
     // A user who installed `oh-my-openagent` from npm gets a node_modules entry
     // whose package.json has `name: "oh-my-openagent"`. The auto-update-checker

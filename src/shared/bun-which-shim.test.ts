@@ -42,7 +42,7 @@ const NODE_FALLBACK_BUN_WHICH = loadNodeFallbackBunWhich()
 
 function loadNodeFallbackBunWhich(): BunWhichFunction {
   const sourcePath = join(dirname(fileURLToPath(import.meta.url)), "bun-which-shim.ts")
-  const source = readFileSync(sourcePath, "utf8")
+  const source = readFileSync(sourcePath, "utf8").replace(/\r\n/g, "\n")
   const fsImport = 'import { accessSync, constants } from "node:fs"\n'
   const pathImport = 'import { delimiter, join } from "node:path"\n'
   const exportSignature = "export function bunWhich(commandName: string): string | null {"

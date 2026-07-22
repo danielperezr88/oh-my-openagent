@@ -11,7 +11,7 @@ export type ChatParamsInput = {
   message: { variant?: string }
 }
 
-type ChatParamsHookInput = ChatParamsInput & {
+export type ChatParamsHookInput = ChatParamsInput & {
   rawMessage?: Record<string, unknown>
 }
 
@@ -83,6 +83,7 @@ function isChatParamsOutput(raw: unknown): raw is ChatParamsOutput {
 
 export function createChatParamsHandler(args: {
   anthropicEffort: { "chat.params"?: (input: ChatParamsHookInput, output: ChatParamsOutput) => Promise<void> } | null
+  costTracker: { "chat.params"?: (input: ChatParamsHookInput, output: ChatParamsOutput) => Promise<void> } | null
   client?: unknown
 }): (input: unknown, output: unknown) => Promise<void> {
   return async (input, output): Promise<void> => {
@@ -191,5 +192,6 @@ export function createChatParamsHandler(args: {
     }
 
     await args.anthropicEffort?.["chat.params"]?.(normalizedInput, output)
+    await args.costTracker?.["chat.params"]?.(normalizedInput, output)
   }
 }

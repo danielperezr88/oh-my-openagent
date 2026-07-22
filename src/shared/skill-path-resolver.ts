@@ -1,4 +1,4 @@
-import { isAbsolute, relative, resolve, sep } from "node:path"
+import { isAbsolute, posix, relative, resolve, sep } from "node:path"
 
 function looksLikeFilePath(path: string): boolean {
 	if (path.endsWith("/")) return true
@@ -17,10 +17,11 @@ export function resolveSkillPathReferences(content: string, basePath: string): s
 			if (relativePathFromBase.startsWith("..") || isAbsolute(relativePathFromBase)) {
 				return match
 			}
-			if (relativePath.endsWith("/") && !resolvedPath.endsWith(sep)) {
-				return `${resolvedPath}/`
+			const forwardSlashResolved = resolvedPath.replace(/\\/g, "/")
+			if (relativePath.endsWith("/") && !forwardSlashResolved.endsWith("/")) {
+				return `${forwardSlashResolved}/`
 			}
-			return resolvedPath
+			return forwardSlashResolved
 		}
 	)
 }
