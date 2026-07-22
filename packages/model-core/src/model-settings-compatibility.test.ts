@@ -258,7 +258,7 @@ describe("resolveCompatibleModelSettings", () => {
       { name: "Kimi (k2)", modelID: "k2-v2", expectedVariants: ["low", "medium", "high"], hasReasoningEffort: false },
       { name: "GLM", modelID: "glm-5", expectedVariants: ["low", "medium", "high"], hasReasoningEffort: false },
       { name: "Minimax", modelID: "minimax-m2.5", expectedVariants: ["low", "medium", "high"], hasReasoningEffort: false },
-      { name: "DeepSeek", modelID: "deepseek-r2", expectedVariants: ["low", "medium", "high"], hasReasoningEffort: true },
+      { name: "DeepSeek", modelID: "deepseek-r2", expectedVariants: ["low", "medium", "high", "max"], hasReasoningEffort: true },
       { name: "Mistral", modelID: "mistral-large-next", expectedVariants: ["low", "medium", "high"], hasReasoningEffort: false },
       { name: "Codestral → Mistral", modelID: "codestral-2506", expectedVariants: ["low", "medium", "high"], hasReasoningEffort: false },
       { name: "Llama", modelID: "llama-4-maverick", expectedVariants: ["low", "medium", "high"], hasReasoningEffort: false },
@@ -278,14 +278,19 @@ describe("resolveCompatibleModelSettings", () => {
       })
 
       test(`${name} (${modelID}): downgrades unsupported variant`, () => {
+        const supportsMax = expectedVariants.includes("max")
+        const desiredVariant = supportsMax ? "xhigh" : "max"
+        const expectedDowngrade = supportsMax
+          ? "high"
+          : expectedVariants[expectedVariants.length - 1]
+
         const result = resolveCompatibleModelSettings({
           providerID: "any-provider",
           modelID,
-          desired: { variant: "max" },
+          desired: { variant: desiredVariant },
         })
 
-        const highest = expectedVariants[expectedVariants.length - 1]
-        expect(result.variant).toBe(highest)
+        expect(result.variant).toBe(expectedDowngrade)
         expect(result.changes[0]?.reason).toBe("unsupported-by-model-family")
       })
 
@@ -321,6 +326,41 @@ describe("resolveCompatibleModelSettings", () => {
     })
   })
 
+  test("GitHub Copilot GPT-5 high-tier variants downgrade to high", () => {
+    for (const modelID of ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]) {
+      for (const requested of ["xhigh", "max"]) {
+        const capabilities = getModelCapabilities({
+          providerID: "github-copilot",
+          modelID,
+        })
+        const result = resolveCompatibleModelSettings({
+          providerID: "github-copilot",
+          modelID,
+          desired: { variant: requested, reasoningEffort: requested },
+          capabilities,
+        })
+
+        expect(result).toEqual({
+          variant: "high",
+          reasoningEffort: "high",
+          changes: [
+            {
+              field: "variant",
+              from: requested,
+              to: "high",
+              reason: "unsupported-by-model-metadata",
+            },
+            {
+              field: "reasoningEffort",
+              from: requested,
+              to: "high",
+              reason: "unsupported-by-model-metadata",
+            },
+          ],
+        })
+      }
+    }
+  })
   test("DeepSeek keeps canonical high and max reasoningEffort values", () => {
     for (const reasoningEffort of ["high", "max"]) {
       const result = resolveCompatibleModelSettings({
@@ -571,6 +611,76 @@ describe("resolveCompatibleModelSettings", () => {
     expect(result.thinking).toBeUndefined()
     expect(result.changes[0]?.field).toBe("thinking")
     expect(result.changes[0]?.reason).toBe("unsupported-by-model-metadata")
+  })
+
+  test("preserves thinking for kimi-for-coding k2p model ids not matched by generic kimi heuristic", () => {
+    for (const modelID of ["k2p6", "k2-p6", "k2.p6"]) {
+      // given
+      const capabilities = getModelCapabilities({
+        providerID: "kimi-for-coding",
+        modelID,
+      })
+
+      // when
+      const result = resolveCompatibleModelSettings({
+        providerID: "kimi-for-coding",
+        modelID,
+        desired: { thinking: { type: "enabled", budgetTokens: 4096 } },
+        capabilities,
+      })
+
+      // then
+      expect(result.thinking).toEqual({ type: "enabled", budgetTokens: 4096 })
+      expect(result.changes).toEqual([])
+    }
+  })
+  test("resolves variant for k2p models via kimi-thinking heuristic family", () => {
+    for (const modelID of ["k2p5", "k2p6", "k2-p6", "k2.p6"]) {
+      // given
+      const capabilities = getModelCapabilities({
+        providerID: "kimi-for-coding",
+        modelID,
+      })
+
+      // when
+      const result = resolveCompatibleModelSettings({
+        providerID: "kimi-for-coding",
+        modelID,
+        desired: { variant: "high" },
+        capabilities,
+      })
+
+      // then
+      expect(result.variant).toBe("high")
+      expect(result.changes).toEqual([])
+    }
+  })
+
+  test("detects k2p models as kimi-thinking family with thinking and variants", () => {
+    for (const modelID of ["k2p5", "k2p6", "k2-p6", "k2.p6"]) {
+      // given
+      const capabilities = getModelCapabilities({
+        providerID: "kimi-for-coding",
+        modelID,
+      })
+
+      // then: kimi-thinking heuristic family should detect thinking support
+      expect(capabilities.supportsThinking).toBe(true)
+      expect(capabilities.family).toBe("kimi-thinking")
+      expect(capabilities.variants).toEqual(["low", "medium", "high"])
+    }
+  })
+
+  test("does not classify kimi-p style IDs as kimi-thinking", () => {
+    // given
+    const capabilities = getModelCapabilities({
+      providerID: "kimi-for-coding",
+      modelID: "kimi-p6",
+    })
+
+    // then
+    expect(capabilities.family).not.toBe("kimi-thinking")
+    expect(capabilities.supportsThinking).not.toBe(true)
   })
 
   test("clamps maxTokens to the model output limit", () => {

@@ -11,7 +11,7 @@ function inferSubProvider(model: string): string | undefined {
 
 const CLAUDE_VERSION_DOT = /claude-(\w+)-(\d+)-(\d+)/g
 const GEMINI_31_PRO_PREVIEW = /gemini-3\.1-pro(?!-)/g
-const GEMINI_3_FLASH_PREVIEW = /gemini-3-flash(?!-)/g
+const GEMINI_3_FLASH_PREVIEW = /(?<!antigravity-)gemini-3-flash(?!-)/g
 
 function claudeVersionDot(model: string): string {
 	return model.replace(CLAUDE_VERSION_DOT, "claude-$1-$2.$3")
@@ -27,7 +27,6 @@ function applyGatewayTransforms(model: string): string {
 function transformModelForProviderUsingAnthropicBehavior(
 	provider: string,
 	model: string,
-	directAnthropicTransform: (model: string) => string,
 ): string {
 	if (provider === "vercel") {
 		const slashIndex = model.indexOf("/")
@@ -53,26 +52,18 @@ function transformModelForProviderUsingAnthropicBehavior(
 			.replace(GEMINI_3_FLASH_PREVIEW, "gemini-3-flash-preview")
 	}
 	if (provider === "anthropic") {
-		return directAnthropicTransform(model)
+		return model
 	}
 	return model
 }
 
 export function transformModelForProvider(provider: string, model: string): string {
-	return transformModelForProviderUsingAnthropicBehavior(
-		provider,
-		model,
-		claudeVersionDot,
-	)
+	return transformModelForProviderUsingAnthropicBehavior(provider, model)
 }
 
 export function transformModelForProviderDisplay(
 	provider: string,
 	model: string,
 ): string {
-	return transformModelForProviderUsingAnthropicBehavior(
-		provider,
-		model,
-		(model) => model,
-	)
+	return transformModelForProviderUsingAnthropicBehavior(provider, model)
 }

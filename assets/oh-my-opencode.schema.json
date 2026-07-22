@@ -45,17 +45,7 @@
     "disabled_skills": {
       "type": "array",
       "items": {
-        "type": "string",
-        "enum": [
-          "playwright",
-          "agent-browser",
-          "dev-browser",
-          "frontend-ui-ux",
-          "git-master",
-          "review-work",
-          "ai-slop-remover",
-          "team-mode"
-        ]
+        "type": "string"
       }
     },
     "disabled_hooks": {
@@ -69,10 +59,7 @@
       "items": {
         "type": "string",
         "enum": [
-          "init-deep",
-          "ralph-loop",
-          "ulw-loop",
-          "cancel-ralph",
+          "goal",
           "refactor",
           "start-work",
           "stop-continuation",
@@ -100,6 +87,10 @@
       }
     },
     "hashline_edit": {
+      "type": "boolean"
+    },
+    "telemetry": {
+      "description": "Enable or disable anonymous telemetry. Default: enabled when omitted. Set to false to disable. Independent of codegraph.telemetry.",
       "type": "boolean"
     },
     "model_fallback": {
@@ -386,7 +377,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -742,7 +740,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -1098,7 +1103,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -1454,7 +1466,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -1813,7 +1832,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -2169,7 +2195,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -2525,7 +2558,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -2881,7 +2921,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -3237,7 +3284,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -3593,7 +3647,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -3949,7 +4010,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -4305,7 +4373,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -4661,7 +4736,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -5017,7 +5099,14 @@
                   ]
                 }
               },
-              "additionalProperties": false
+              "additionalProperties": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "allow",
+                  "deny"
+                ]
+              }
             },
             "maxTokens": {
               "type": "number"
@@ -5374,7 +5463,14 @@
                 ]
               }
             },
-            "additionalProperties": false
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "ask",
+                "allow",
+                "deny"
+              ]
+            }
           },
           "maxTokens": {
             "type": "number"
@@ -5722,6 +5818,10 @@
           "additionalProperties": {
             "type": "boolean"
           }
+        },
+        "anthropic_provider": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "additionalProperties": false
@@ -5761,9 +5861,6 @@
       "type": "object",
       "properties": {
         "aggressive_truncation": {
-          "type": "boolean"
-        },
-        "auto_resume": {
           "type": "boolean"
         },
         "preemptive_compaction": {
@@ -5912,39 +6009,8 @@
           "minimum": 1,
           "maximum": 9007199254740991
         },
-        "task_dag": {
+        "disable_live_parent_wake_routing": {
           "type": "boolean"
-        },
-        "mcp_deferred_loading": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "semantic_url": {
-                  "type": "string"
-                },
-                "always_load": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                },
-                "stub_description": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "enabled"
-              ],
-              "additionalProperties": false
-            }
-          ]
         }
       },
       "additionalProperties": false
@@ -6063,10 +6129,14 @@
         }
       ]
     },
-    "ralph_loop": {
+    "goal": {
       "type": "object",
       "properties": {
         "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "auto_start": {
           "default": false,
           "type": "boolean"
         },
@@ -6075,25 +6145,21 @@
           "type": "number",
           "minimum": 1,
           "maximum": 1000
-        },
-        "state_dir": {
-          "type": "string"
-        },
-        "default_strategy": {
-          "default": "continue",
-          "type": "string",
-          "enum": [
-            "reset",
-            "continue"
-          ]
         }
       },
       "required": [
         "enabled",
-        "default_max_iterations",
-        "default_strategy"
+        "auto_start",
+        "default_max_iterations"
       ],
       "additionalProperties": false
+    },
+    "ralph_loop": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {}
     },
     "runtime_fallback": {
       "anyOf": [
@@ -6126,6 +6192,9 @@
               "minimum": 0
             },
             "notify_on_fallback": {
+              "type": "boolean"
+            },
+            "restore_primary_after_cooldown": {
               "type": "boolean"
             }
           },
@@ -6396,6 +6465,130 @@
       },
       "additionalProperties": false
     },
+    "monitor": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "live_mode_enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "allowed_commands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "max_monitors_per_session": {
+          "default": 3,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "max_runtime_ms": {
+          "default": 1800000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 9007199254740991
+        },
+        "batch_max_lines": {
+          "default": 50,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "batch_max_bytes": {
+          "default": 16384,
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 9007199254740991
+        },
+        "flush_interval_ms": {
+          "default": 1000,
+          "type": "integer",
+          "minimum": 250,
+          "maximum": 9007199254740991
+        },
+        "ring_max_lines": {
+          "default": 1000,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "line_max_bytes": {
+          "default": 8192,
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 9007199254740991
+        },
+        "pattern_max_length": {
+          "default": 512,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "enabled",
+        "live_mode_enabled",
+        "max_monitors_per_session",
+        "max_runtime_ms",
+        "batch_max_lines",
+        "batch_max_bytes",
+        "flush_interval_ms",
+        "ring_max_lines",
+        "line_max_bytes",
+        "pattern_max_length"
+      ],
+      "additionalProperties": false
+    },
+    "codegraph": {
+      "type": "object",
+      "properties": {
+        "auto_init": {
+          "default": true,
+          "type": "boolean"
+        },
+        "auto_provision": {
+          "default": true,
+          "type": "boolean"
+        },
+        "daemon": {
+          "default": false,
+          "type": "boolean"
+        },
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "excluded_roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "install_dir": {
+          "type": "string"
+        },
+        "telemetry": {
+          "type": "boolean"
+        },
+        "watch_debounce_ms": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "auto_init",
+        "auto_provision",
+        "daemon",
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
     "team_mode": {
       "type": "object",
       "properties": {
@@ -6482,8 +6675,6 @@
             "type": "string",
             "enum": [
               "ultrawork",
-              "search",
-              "analyze",
               "team",
               "hyperplan",
               "hyperplan-ultrawork"
@@ -6496,8 +6687,6 @@
             "type": "string",
             "enum": [
               "ultrawork",
-              "search",
-              "analyze",
               "team",
               "hyperplan",
               "hyperplan-ultrawork"
@@ -6567,6 +6756,12 @@
             "dev-browser",
             "playwright-cli"
           ]
+        },
+        "playwright_mcp_args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
@@ -6641,6 +6836,36 @@
       ],
       "additionalProperties": false
     },
+    "tui": {
+      "default": {
+        "sidebar": {
+          "enabled": true
+        }
+      },
+      "type": "object",
+      "properties": {
+        "sidebar": {
+          "default": {
+            "enabled": true
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "sidebar"
+      ],
+      "additionalProperties": false
+    },
     "sisyphus": {
       "type": "object",
       "properties": {
@@ -6686,14 +6911,14 @@
           "default": false,
           "type": "boolean"
         },
-        "ralph_loop": {
+        "goal": {
           "default": false,
           "type": "boolean"
         }
       },
       "required": [
         "ultrawork",
-        "ralph_loop"
+        "goal"
       ],
       "additionalProperties": false
     },

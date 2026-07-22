@@ -1,0 +1,2668 @@
+#!/usr/bin/env node
+
+// src/serve.ts
+import { existsSync as existsSync5, realpathSync as realpathSync2 } from "node:fs";
+import { homedir as homedir7 } from "node:os";
+import { basename as basename3, join as join7, resolve as resolve3 } from "node:path";
+import {
+  cwd as processCwd,
+  env as processEnv,
+  stdin as processStdin,
+  stderr as processStderr,
+  stdout as processStdout
+} from "node:process";
+import { fileURLToPath } from "node:url";
+
+// ../../../../utils/src/codegraph/env.ts
+import { homedir } from "node:os";
+import { join } from "node:path";
+var CODEGRAPH_INSTALL_DIR_ENV = "CODEGRAPH_INSTALL_DIR";
+var CODEGRAPH_NO_DAEMON_ENV = "CODEGRAPH_NO_DAEMON";
+var CODEGRAPH_NO_DOWNLOAD_ENV = "CODEGRAPH_NO_DOWNLOAD";
+var CODEGRAPH_TELEMETRY_ENV = "CODEGRAPH_TELEMETRY";
+var DO_NOT_TRACK_ENV = "DO_NOT_TRACK";
+var SAFE_AMBIENT_ENV_KEYS = new Set([
+  "APPDATA",
+  "CI",
+  "CODEX_HOME",
+  "ComSpec",
+  "HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOCALAPPDATA",
+  "PATH",
+  "PATHEXT",
+  "Path",
+  "SystemRoot",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+  "USERPROFILE",
+  "WINDIR",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_DATA_HOME",
+  "XDG_STATE_HOME"
+]);
+var SAFE_CODEGRAPH_RUNTIME_ENV_KEYS = new Set([
+  "CODEGRAPH_ALLOW_UNSAFE_NODE",
+  "CODEGRAPH_BIN",
+  "CODEGRAPH_DAEMON_IDLE_TIMEOUT_MS",
+  "CODEGRAPH_FAKE_LOG",
+  "CODEGRAPH_NO_DAEMON",
+  "CODEGRAPH_NODE_BIN",
+  "OMO_CODEGRAPH_BIN",
+  "OMO_CODEGRAPH_PROJECT_CWD",
+  "OMO_CODEGRAPH_SESSION_START_CWD"
+]);
+function buildCodegraphEnv(options = {}) {
+  const homeDir = options.homeDir ?? homedir();
+  return {
+    [CODEGRAPH_INSTALL_DIR_ENV]: join(homeDir, ".omo", "codegraph"),
+    ...options.daemon === true ? {} : { [CODEGRAPH_NO_DAEMON_ENV]: "1" },
+    [CODEGRAPH_NO_DOWNLOAD_ENV]: "1",
+    [CODEGRAPH_TELEMETRY_ENV]: "0",
+    [DO_NOT_TRACK_ENV]: "1"
+  };
+}
+function copyDefinedEnvKeys(output, input, allowedKeys) {
+  for (const key of allowedKeys) {
+    const value = input[key];
+    if (value !== undefined)
+      output[key] = value;
+  }
+}
+function copyDefinedEnv(output, input) {
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined)
+      output[key] = value;
+  }
+}
+function buildCodegraphChildEnv(options = {}) {
+  const env = {};
+  copyDefinedEnvKeys(env, options.ambientEnv ?? {}, SAFE_AMBIENT_ENV_KEYS);
+  copyDefinedEnvKeys(env, options.runtimeEnv ?? {}, SAFE_CODEGRAPH_RUNTIME_ENV_KEYS);
+  copyDefinedEnv(env, options.codegraphEnv ?? {});
+  return env;
+}
+
+// ../../../../utils/src/codegraph/manifest.ts
+var CODEGRAPH_PINNED_VERSION = "1.4.1";
+var CODEGRAPH_PROVISION_MANIFEST = {
+  assets: {
+    "darwin-arm64": {
+      executableName: "codegraph",
+      sha256: "4a679ae5a5cb9fff900dd59bb786da6a581b7f68f4cf713bdedd137e347d34dc",
+      url: "https://github.com/colbymchenry/codegraph/releases/download/v1.4.1/codegraph-darwin-arm64.tar.gz"
+    },
+    "darwin-x64": {
+      executableName: "codegraph",
+      sha256: "436f96943cfd926ea6d0a8454f18833d21254d5fd9b3d224317b1426132def95",
+      url: "https://github.com/colbymchenry/codegraph/releases/download/v1.4.1/codegraph-darwin-x64.tar.gz"
+    },
+    "linux-arm64": {
+      executableName: "codegraph",
+      sha256: "0d62c5eb2722f8d19d20f7a1bd974445e18d5294cb59be116a0c3d55ce87591f",
+      url: "https://github.com/colbymchenry/codegraph/releases/download/v1.4.1/codegraph-linux-arm64.tar.gz"
+    },
+    "linux-x64": {
+      executableName: "codegraph",
+      sha256: "fb585ff5018d6faaa46d282b61f4f689bc7967ed8a1b467a5c556dd7ced9b542",
+      url: "https://github.com/colbymchenry/codegraph/releases/download/v1.4.1/codegraph-linux-x64.tar.gz"
+    },
+    "win32-arm64": {
+      executableName: "codegraph.cmd",
+      sha256: "e2a2a28c802a79804c7df203afa50bd461309c6c180ce3f76079fdc7cddc7697",
+      url: "https://registry.npmjs.org/@colbymchenry/codegraph-win32-arm64/-/codegraph-win32-arm64-1.4.1.tgz"
+    },
+    "win32-x64": {
+      executableName: "codegraph.cmd",
+      sha256: "4f08700fda5f4a03ad5b2956135c5788d739a351b3433db2b5820e5d5224c30d",
+      url: "https://registry.npmjs.org/@colbymchenry/codegraph-win32-x64/-/codegraph-win32-x64-1.4.1.tgz"
+    }
+  },
+  version: CODEGRAPH_PINNED_VERSION
+};
+
+// ../../../../utils/src/codegraph/node-support.ts
+var CODEGRAPH_MIN_NODE_MAJOR = 20;
+var CODEGRAPH_BLOCKED_NODE_MAJOR = 25;
+var CODEGRAPH_UNSAFE_NODE_ENV = "CODEGRAPH_ALLOW_UNSAFE_NODE";
+var CODEGRAPH_NODE_BIN_ENV = "CODEGRAPH_NODE_BIN";
+function evaluateCodegraphNodeSupport(options = {}) {
+  const nodeVersion = options.nodeVersion ?? process.versions.node;
+  const env = options.env ?? process.env;
+  const override = (env[CODEGRAPH_UNSAFE_NODE_ENV]?.trim().length ?? 0) > 0;
+  const major = parseNodeMajor(nodeVersion);
+  if (major >= CODEGRAPH_BLOCKED_NODE_MAJOR) {
+    return { major, override, reason: "too-new", supported: override };
+  }
+  if (major < CODEGRAPH_MIN_NODE_MAJOR) {
+    return { major, override, reason: "too-old", supported: override };
+  }
+  return { major, override, supported: true };
+}
+function buildCodegraphNodeSkipHint(support) {
+  const detail = support.reason === "too-new" ? `Node ${support.major} is unsupported (>= ${CODEGRAPH_BLOCKED_NODE_MAJOR} crashes CodeGraph mid-indexing)` : `Node ${support.major} is too old (CodeGraph requires >= ${CODEGRAPH_MIN_NODE_MAJOR})`;
+  return `CodeGraph MCP skipped: ${detail}. Use Node ${CODEGRAPH_MIN_NODE_MAJOR}-${CODEGRAPH_BLOCKED_NODE_MAJOR - 1} (e.g. Node 22 LTS) or set ${CODEGRAPH_UNSAFE_NODE_ENV}=1 to override.
+`;
+}
+function parseNodeMajor(version) {
+  const normalized = version.startsWith("v") ? version.slice(1) : version;
+  const major = Number.parseInt(normalized.split(".")[0] ?? "", 10);
+  return Number.isNaN(major) ? 0 : major;
+}
+
+// ../../../../utils/src/codegraph/provision.ts
+import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
+import { chmod, mkdir, readdir, readFile, rename, rm, rmdir, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { homedir as homedir2, hostname } from "node:os";
+import { basename, join as join2 } from "node:path";
+import { promisify } from "node:util";
+var DEFAULT_LOCK_WAIT_MS = 5000;
+var DEFAULT_LOCK_STALE_MS = 120000;
+var DEFAULT_DOWNLOAD_TIMEOUT_MS = 60000;
+var execFileAsync = promisify(execFile);
+function platformKey() {
+  return `${process.platform}-${process.arch}`;
+}
+function markerPath(installDir, version) {
+  return join2(installDir, ".provisioned", `codegraph-${version}.json`);
+}
+function defaultInstallDir() {
+  return join2(homedir2(), ".omo", "codegraph");
+}
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+function isErrnoException(error) {
+  return error instanceof Error && "code" in error;
+}
+async function removeEmptyDirectory(path) {
+  try {
+    await rmdir(path);
+  } catch (error) {
+    if (isErrnoException(error) && error.code === "ENOENT")
+      return;
+    if (isErrnoException(error) && error.code === "ENOTEMPTY")
+      return;
+    throw error;
+  }
+}
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function defaultDownloader(asset, timeoutMs = DEFAULT_DOWNLOAD_TIMEOUT_MS) {
+  const response = await fetch(asset.url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!response.ok)
+    throw new Error(`download failed with HTTP ${response.status}`);
+  return new Uint8Array(await response.arrayBuffer());
+}
+function forcedBadChecksumOptions(options) {
+  if (options.forceBadChecksum !== true)
+    return null;
+  const key = options.platformKey ?? platformKey();
+  return {
+    downloader: async () => new TextEncoder().encode("checksum mismatch"),
+    installDir: options.installDir ?? join2(options.lockDir, "codegraph-force-bad-checksum"),
+    manifest: {
+      assets: {
+        [key]: { executableName: process.platform === "win32" ? "codegraph.cmd" : "codegraph", sha256: "0000", url: "memory://bad" }
+      },
+      version: options.version
+    },
+    platformKey: key
+  };
+}
+async function readMarker(path) {
+  if (!existsSync(path))
+    return null;
+  try {
+    const raw = JSON.parse(await readFile(path, "utf8"));
+    if (typeof raw === "object" && raw !== null && "binPath" in raw) {
+      const value = raw.binPath;
+      return typeof value === "string" && existsSync(value) ? value : null;
+    }
+    return null;
+  } catch (error) {
+    if (error instanceof Error)
+      return null;
+    throw error;
+  }
+}
+async function acquireLock(lockPath, waitMs, staleMs) {
+  const startedAt = Date.now();
+  await mkdir(join2(lockPath, ".."), { recursive: true });
+  while (Date.now() - startedAt <= waitMs) {
+    try {
+      await mkdir(lockPath);
+      return () => rm(lockPath, { force: true, recursive: true });
+    } catch (error) {
+      if (!isErrnoException(error) || error.code !== "EEXIST")
+        throw error;
+      const lockStat = await stat(lockPath).catch(() => null);
+      if (lockStat !== null && Date.now() - lockStat.mtimeMs > staleMs) {
+        await rm(lockPath, { force: true, recursive: true });
+        continue;
+      }
+      await sleep(25);
+    }
+  }
+  return null;
+}
+async function extractTarGz(archivePath, destinationDir) {
+  await execFileAsync("tar", ["-xzf", archivePath, "-C", destinationDir]);
+}
+async function installExtractedBundle(extractDir, installDir, executableName) {
+  const roots = await readdir(extractDir);
+  if (roots.length !== 1)
+    throw new Error(`CodeGraph archive should contain one root directory, found ${roots.length}`);
+  const bundleDir = join2(extractDir, roots[0] ?? "");
+  const bundleEntries = await readdir(bundleDir);
+  await mkdir(installDir, { recursive: true });
+  for (const entry of bundleEntries) {
+    await rm(join2(installDir, entry), { force: true, recursive: true });
+    await rename(join2(bundleDir, entry), join2(installDir, entry));
+  }
+  const destination = join2(installDir, "bin", executableName);
+  if (!existsSync(destination))
+    throw new Error(`CodeGraph archive did not contain bin/${executableName}`);
+  await chmod(destination, 493);
+  return destination;
+}
+async function installAsset(layout) {
+  const { asset, downloader, installDir, version } = layout;
+  const stagingDir = join2(installDir, ".staging", randomUUID());
+  const archivePath = join2(stagingDir, basename(asset.url));
+  const extractDir = join2(stagingDir, "extract");
+  try {
+    await mkdir(extractDir, { recursive: true });
+    const bytes = await downloader(asset);
+    const actualChecksum = sha256(bytes);
+    if (actualChecksum !== asset.sha256) {
+      throw new Error(`checksum mismatch for ${basename(asset.url)}: expected ${asset.sha256}, got ${actualChecksum}`);
+    }
+    if (!asset.url.endsWith(".tar.gz") && !asset.url.endsWith(".tgz")) {
+      throw new Error(`unsupported CodeGraph archive type for ${basename(asset.url)}`);
+    }
+    await writeFile(archivePath, bytes);
+    await extractTarGz(archivePath, extractDir);
+    const destination = await installExtractedBundle(extractDir, installDir, asset.executableName);
+    await mkdir(join2(installDir, ".provisioned"), { recursive: true });
+    await writeFile(markerPath(installDir, version), `${JSON.stringify({ binPath: destination, version })}
+`);
+    return destination;
+  } finally {
+    await rm(stagingDir, { force: true, recursive: true });
+    await removeEmptyDirectory(join2(installDir, ".staging"));
+  }
+}
+async function ensureCodegraphProvisioned(options) {
+  const forced = forcedBadChecksumOptions(options);
+  const installDir = forced?.installDir ?? options.installDir ?? defaultInstallDir();
+  const manifest = forced?.manifest ?? options.manifest ?? CODEGRAPH_PROVISION_MANIFEST;
+  const activePlatformKey = forced?.platformKey ?? options.platformKey ?? platformKey();
+  const downloader = forced?.downloader ?? options.downloader ?? ((asset) => defaultDownloader(asset, options.downloadTimeoutMs));
+  const marker = markerPath(installDir, options.version);
+  const existing = await readMarker(marker);
+  if (existing !== null)
+    return { binPath: existing, provisioned: true };
+  const lockPath = join2(options.lockDir, `codegraph-${hostname()}.lock`);
+  const release = await acquireLock(lockPath, options.lockWaitMs ?? DEFAULT_LOCK_WAIT_MS, options.lockStaleMs ?? DEFAULT_LOCK_STALE_MS);
+  if (release === null)
+    return { error: "timed out waiting for codegraph provisioning lock", provisioned: false };
+  try {
+    const lockedExisting = await readMarker(marker);
+    if (lockedExisting !== null)
+      return { binPath: lockedExisting, provisioned: true };
+    if (manifest.version !== options.version) {
+      return { error: `manifest version ${manifest.version} does not match requested ${options.version}`, provisioned: false };
+    }
+    const asset = manifest.assets[activePlatformKey];
+    if (asset === undefined) {
+      return { error: `no CodeGraph ${options.version} asset for ${activePlatformKey}`, provisioned: false };
+    }
+    const binPath = await installAsset({ asset, downloader, installDir, version: options.version });
+    return { binPath, provisioned: true };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error), provisioned: false };
+  } finally {
+    await release();
+  }
+}
+
+// ../../../../utils/src/codegraph/resolve.ts
+import { existsSync as existsSync2 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { spawnSync } from "node:child_process";
+import { basename as basename2, dirname, join as join4 } from "node:path";
+import { createRequire } from "node:module";
+
+// ../../../../utils/src/runtime/which.ts
+import { accessSync, constants } from "node:fs";
+import { delimiter, join as join3 } from "node:path";
+var runtime = globalThis;
+function isUnsafeCommandName(commandName) {
+  if (commandName.includes("/") || commandName.includes("\\"))
+    return true;
+  if (commandName === "." || commandName === ".." || commandName.includes(".."))
+    return true;
+  if (/^[a-zA-Z]:/.test(commandName))
+    return true;
+  if (commandName.includes("\x00"))
+    return true;
+  return false;
+}
+function isExecutable(filePath) {
+  try {
+    accessSync(filePath, process.platform === "win32" ? constants.F_OK : constants.X_OK);
+    return true;
+  } catch (error) {
+    if (!(error instanceof Error) && Object.prototype.toString.call(error) !== "[object Error]") {
+      throw error;
+    }
+    return false;
+  }
+}
+function resolvePathValue() {
+  if (process.platform === "win32")
+    return process.env["Path"] ?? process.env["PATH"];
+  return process.env["PATH"];
+}
+function getWindowsCandidates(commandName) {
+  if (process.platform !== "win32")
+    return [commandName];
+  if (/\.[^\\/]+$/.test(commandName))
+    return [commandName];
+  return [commandName, `${commandName}.exe`, `${commandName}.cmd`, `${commandName}.bat`, `${commandName}.com`];
+}
+function bunWhich(commandName) {
+  if (!commandName)
+    return null;
+  if (isUnsafeCommandName(commandName))
+    return null;
+  const candidateNames = getWindowsCandidates(commandName);
+  for (const candidateName of candidateNames) {
+    const resolvedPath = runtime.Bun?.which(candidateName) ?? null;
+    if (resolvedPath !== null)
+      return resolvedPath;
+  }
+  const pathValue = resolvePathValue();
+  if (!pathValue)
+    return null;
+  const pathEntries = pathValue.split(delimiter).filter((pathEntry) => pathEntry.length > 0);
+  if (pathEntries.length === 0)
+    return null;
+  for (const pathEntry of pathEntries) {
+    for (const candidateName of candidateNames) {
+      const candidatePath = join3(pathEntry, candidateName);
+      if (isExecutable(candidatePath))
+        return candidatePath;
+    }
+  }
+  return null;
+}
+
+// ../../../../utils/src/codegraph/resolve.ts
+function codegraphCommandRequiresSupportedLocalNode(resolution) {
+  return resolution.source !== "bundled" && resolution.source !== "env" && resolution.source !== "provisioned";
+}
+var CODEGRAPH_PACKAGE = "@colbymchenry/codegraph";
+var CODEGRAPH_ENV_BIN = "OMO_CODEGRAPH_BIN";
+var CODEGRAPH_LEGACY_ENV_BIN = "CODEGRAPH_BIN";
+var CODEGRAPH_NODE_CANDIDATES = ["node24", "node22", "node20", "node"];
+var CODEGRAPH_NODE_PATH_CANDIDATES = [
+  "/opt/homebrew/opt/node@24/bin/node",
+  "/opt/homebrew/opt/node@22/bin/node",
+  "/opt/homebrew/opt/node@20/bin/node",
+  "/usr/local/opt/node@24/bin/node",
+  "/usr/local/opt/node@22/bin/node",
+  "/usr/local/opt/node@20/bin/node"
+];
+var requireFromHere = createRequire(import.meta.url);
+function defaultRequireResolve(specifier) {
+  return requireFromHere.resolve(specifier);
+}
+function defaultNodeVersion(nodePath) {
+  if (nodePath === process.execPath && isNodeExecutableName(nodePath))
+    return process.versions.node;
+  try {
+    const result = spawnSync(nodePath, ["--version"], {
+      encoding: "utf8",
+      timeout: 2000,
+      windowsHide: true
+    });
+    if (result.error !== undefined || result.status !== 0)
+      return null;
+    const version = `${result.stdout}
+${result.stderr}`.trim().split(/\s+/)[0];
+    return version === undefined || version.length === 0 ? null : version;
+  } catch (error) {
+    if (error instanceof Error)
+      return null;
+    throw error;
+  }
+}
+function isNodeExecutableName(filePath) {
+  const executable = basename2(filePath).toLowerCase();
+  return executable === "node" || executable === "node.exe" || /^node\d+(\.exe)?$/.test(executable);
+}
+function looksLikePath(command) {
+  return command.includes("/") || command.includes("\\") || /^[a-zA-Z]:/.test(command);
+}
+function resolveConfiguredNodeRuntime(configured, fileExists, which) {
+  if (looksLikePath(configured))
+    return fileExists(configured) ? configured : null;
+  return which(configured);
+}
+function supportsCodegraphNodeRuntime(nodePath, env, nodeVersion) {
+  const version = nodeVersion(nodePath);
+  if (version === null)
+    return false;
+  return evaluateCodegraphNodeSupport({ env, nodeVersion: version }).supported;
+}
+function defaultNodeRuntime(env, fileExists, which, nodeVersion) {
+  const configured = env[CODEGRAPH_NODE_BIN_ENV]?.trim();
+  if (configured !== undefined && configured.length > 0) {
+    const resolved = resolveConfiguredNodeRuntime(configured, fileExists, which);
+    return resolved !== null && supportsCodegraphNodeRuntime(resolved, env, nodeVersion) ? resolved : null;
+  }
+  const candidates = [
+    ...isNodeExecutableName(process.execPath) ? [process.execPath] : [],
+    ...CODEGRAPH_NODE_CANDIDATES.map((commandName) => which(commandName)).filter((candidate) => candidate !== null),
+    ...CODEGRAPH_NODE_PATH_CANDIDATES.filter((candidate) => fileExists(candidate))
+  ];
+  const seen = new Set;
+  for (const candidate of candidates) {
+    if (seen.has(candidate))
+      continue;
+    seen.add(candidate);
+    if (supportsCodegraphNodeRuntime(candidate, env, nodeVersion))
+      return candidate;
+  }
+  return null;
+}
+function defaultProvisionedBin(homeDir, fileExists) {
+  const binaryName = process.platform === "win32" ? "codegraph.cmd" : "codegraph";
+  const candidates = [
+    join4(homeDir, ".omo", "codegraph", "bin", binaryName),
+    join4(homeDir, ".omo", "codegraph", "node-servers", "node_modules", ".bin", binaryName)
+  ];
+  return candidates.find((candidate) => fileExists(candidate)) ?? null;
+}
+function resolveBundledShim(requireResolve, fileExists) {
+  try {
+    const packageJson = requireResolve(`${CODEGRAPH_PACKAGE}/package.json`);
+    const packageRoot = dirname(packageJson);
+    const candidates = [join4(packageRoot, "bin", "codegraph.js"), join4(packageRoot, "npm-shim.js")];
+    return candidates.find((candidate) => fileExists(candidate)) ?? null;
+  } catch (error) {
+    if (error instanceof Error)
+      return null;
+    if (error === null || error === undefined)
+      return null;
+    if (typeof error === "object" || typeof error === "string" || typeof error === "number")
+      return null;
+    if (typeof error === "boolean" || typeof error === "bigint" || typeof error === "symbol")
+      return null;
+    return null;
+  }
+}
+function resolveCodegraphCommand(options = {}) {
+  const env = options.env ?? process.env;
+  const fileExists = options.fileExists ?? existsSync2;
+  const configuredBin = env[CODEGRAPH_ENV_BIN]?.trim() || env[CODEGRAPH_LEGACY_ENV_BIN]?.trim();
+  if (configuredBin !== undefined && configuredBin.length > 0) {
+    return { argsPrefix: [], command: configuredBin, exists: fileExists(configuredBin), source: "env" };
+  }
+  const which = options.which ?? bunWhich;
+  const nodeRuntime = options.nodeRuntime ?? (() => defaultNodeRuntime(env, fileExists, which, options.nodeVersion ?? defaultNodeVersion));
+  const bundled = resolveBundledShim(options.requireResolve ?? defaultRequireResolve, fileExists);
+  const runtime2 = nodeRuntime();
+  if (bundled !== null && runtime2 !== null) {
+    return { argsPrefix: [bundled], command: runtime2, exists: true, source: "bundled" };
+  }
+  const provisioned = options.provisioned?.() ?? defaultProvisionedBin(options.homeDir ?? homedir3(), fileExists);
+  if (provisioned !== null && fileExists(provisioned)) {
+    return { argsPrefix: [], command: provisioned, exists: true, source: "provisioned" };
+  }
+  const pathCommand = which("codegraph");
+  return {
+    argsPrefix: [],
+    command: pathCommand ?? "codegraph",
+    exists: pathCommand !== null,
+    source: "path"
+  };
+}
+
+// ../../../../utils/src/codegraph/exclusion.ts
+import { realpathSync } from "node:fs";
+import { homedir as homedir4, tmpdir as osTmpdir } from "node:os";
+import { isAbsolute, join as join5, resolve } from "node:path";
+var POSIX_DEFAULT_EXCLUDED_ROOTS = ["/tmp", "/private/tmp"];
+function expandHome(path, homeDir) {
+  if (path === "~")
+    return homeDir;
+  if (path.startsWith("~/") || path.startsWith("~\\"))
+    return join5(homeDir, path.slice(2));
+  return path;
+}
+function realpathIfPossible(path) {
+  try {
+    return realpathSync(path);
+  } catch (error) {
+    if (error instanceof Error)
+      return resolve(path);
+    throw error;
+  }
+}
+function resolveConfiguredRoot(path, homeDir) {
+  const expanded = expandHome(path, homeDir);
+  return realpathIfPossible(isAbsolute(expanded) ? expanded : join5(homeDir, expanded));
+}
+function normalizeForComparison(path, platform) {
+  const normalized = path.replaceAll("\\", "/").replace(/\/+$/, "");
+  return platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+function pathIsWithin(path, root, platform) {
+  const candidate = normalizeForComparison(path, platform);
+  const normalizedRoot = normalizeForComparison(root, platform);
+  return candidate === normalizedRoot || candidate.startsWith(`${normalizedRoot}/`);
+}
+function hasOmoPathSegment(path) {
+  return path.split(/[\\/]+/).includes(".omo");
+}
+function defaultExcludedRoots(platform, tmpdir) {
+  return platform === "win32" ? [tmpdir] : [...POSIX_DEFAULT_EXCLUDED_ROOTS, tmpdir];
+}
+function shouldExcludeCodegraphProject(workspace, options = {}) {
+  const platform = options.platform ?? process.platform;
+  const homeDir = options.homeDir ?? homedir4();
+  const tmpdir = options.tmpdir ?? osTmpdir();
+  const resolvedWorkspace = realpathIfPossible(resolve(workspace));
+  if (hasOmoPathSegment(resolvedWorkspace)) {
+    return { excluded: true, matchedRoot: ".omo", reason: "omo-state" };
+  }
+  for (const root of defaultExcludedRoots(platform, tmpdir)) {
+    const resolvedRoot = realpathIfPossible(resolve(root));
+    if (pathIsWithin(resolvedWorkspace, resolvedRoot, platform)) {
+      return { excluded: true, matchedRoot: root, reason: "tmp-root" };
+    }
+  }
+  for (const root of options.excludedRoots ?? []) {
+    const trimmedRoot = root.trim();
+    if (trimmedRoot.length === 0)
+      continue;
+    const resolvedRoot = resolveConfiguredRoot(trimmedRoot, homeDir);
+    if (pathIsWithin(resolvedWorkspace, resolvedRoot, platform)) {
+      return { excluded: true, matchedRoot: root, reason: "custom-root" };
+    }
+  }
+  return { excluded: false };
+}
+// ../../shared/src/config-loader.ts
+import { homedir as homedir6 } from "node:os";
+
+// ../../../../utils/src/omo-config/loader.ts
+import { existsSync as existsSync4 } from "node:fs";
+import { homedir as homedir5 } from "node:os";
+
+// ../../../../utils/src/omo-config/body.ts
+import { readFileSync } from "node:fs";
+
+// ../../../../utils/src/deep-merge.ts
+var DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+function isUnsafeObjectKey(key) {
+  return DANGEROUS_KEYS.has(key);
+}
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) && Object.prototype.toString.call(value) === "[object Object]";
+}
+
+// ../../../../../node_modules/.bun/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/scanner.js
+function createScanner(text, ignoreTrivia = false) {
+  const len = text.length;
+  let pos = 0, value = "", tokenOffset = 0, token = 16, lineNumber = 0, lineStartOffset = 0, tokenLineStartOffset = 0, prevTokenLineStartOffset = 0, scanError = 0;
+  function scanHexDigits(count, exact) {
+    let digits = 0;
+    let value2 = 0;
+    while (digits < count || !exact) {
+      let ch = text.charCodeAt(pos);
+      if (ch >= 48 && ch <= 57) {
+        value2 = value2 * 16 + ch - 48;
+      } else if (ch >= 65 && ch <= 70) {
+        value2 = value2 * 16 + ch - 65 + 10;
+      } else if (ch >= 97 && ch <= 102) {
+        value2 = value2 * 16 + ch - 97 + 10;
+      } else {
+        break;
+      }
+      pos++;
+      digits++;
+    }
+    if (digits < count) {
+      value2 = -1;
+    }
+    return value2;
+  }
+  function setPosition(newPosition) {
+    pos = newPosition;
+    value = "";
+    tokenOffset = 0;
+    token = 16;
+    scanError = 0;
+  }
+  function scanNumber() {
+    let start = pos;
+    if (text.charCodeAt(pos) === 48) {
+      pos++;
+    } else {
+      pos++;
+      while (pos < text.length && isDigit(text.charCodeAt(pos))) {
+        pos++;
+      }
+    }
+    if (pos < text.length && text.charCodeAt(pos) === 46) {
+      pos++;
+      if (pos < text.length && isDigit(text.charCodeAt(pos))) {
+        pos++;
+        while (pos < text.length && isDigit(text.charCodeAt(pos))) {
+          pos++;
+        }
+      } else {
+        scanError = 3;
+        return text.substring(start, pos);
+      }
+    }
+    let end = pos;
+    if (pos < text.length && (text.charCodeAt(pos) === 69 || text.charCodeAt(pos) === 101)) {
+      pos++;
+      if (pos < text.length && text.charCodeAt(pos) === 43 || text.charCodeAt(pos) === 45) {
+        pos++;
+      }
+      if (pos < text.length && isDigit(text.charCodeAt(pos))) {
+        pos++;
+        while (pos < text.length && isDigit(text.charCodeAt(pos))) {
+          pos++;
+        }
+        end = pos;
+      } else {
+        scanError = 3;
+      }
+    }
+    return text.substring(start, end);
+  }
+  function scanString() {
+    let result = "", start = pos;
+    while (true) {
+      if (pos >= len) {
+        result += text.substring(start, pos);
+        scanError = 2;
+        break;
+      }
+      const ch = text.charCodeAt(pos);
+      if (ch === 34) {
+        result += text.substring(start, pos);
+        pos++;
+        break;
+      }
+      if (ch === 92) {
+        result += text.substring(start, pos);
+        pos++;
+        if (pos >= len) {
+          scanError = 2;
+          break;
+        }
+        const ch2 = text.charCodeAt(pos++);
+        switch (ch2) {
+          case 34:
+            result += '"';
+            break;
+          case 92:
+            result += "\\";
+            break;
+          case 47:
+            result += "/";
+            break;
+          case 98:
+            result += "\b";
+            break;
+          case 102:
+            result += "\f";
+            break;
+          case 110:
+            result += `
+`;
+            break;
+          case 114:
+            result += "\r";
+            break;
+          case 116:
+            result += "\t";
+            break;
+          case 117:
+            const ch3 = scanHexDigits(4, true);
+            if (ch3 >= 0) {
+              result += String.fromCharCode(ch3);
+            } else {
+              scanError = 4;
+            }
+            break;
+          default:
+            scanError = 5;
+        }
+        start = pos;
+        continue;
+      }
+      if (ch >= 0 && ch <= 31) {
+        if (isLineBreak(ch)) {
+          result += text.substring(start, pos);
+          scanError = 2;
+          break;
+        } else {
+          scanError = 6;
+        }
+      }
+      pos++;
+    }
+    return result;
+  }
+  function scanNext() {
+    value = "";
+    scanError = 0;
+    tokenOffset = pos;
+    lineStartOffset = lineNumber;
+    prevTokenLineStartOffset = tokenLineStartOffset;
+    if (pos >= len) {
+      tokenOffset = len;
+      return token = 17;
+    }
+    let code = text.charCodeAt(pos);
+    if (isWhiteSpace(code)) {
+      do {
+        pos++;
+        value += String.fromCharCode(code);
+        code = text.charCodeAt(pos);
+      } while (isWhiteSpace(code));
+      return token = 15;
+    }
+    if (isLineBreak(code)) {
+      pos++;
+      value += String.fromCharCode(code);
+      if (code === 13 && text.charCodeAt(pos) === 10) {
+        pos++;
+        value += `
+`;
+      }
+      lineNumber++;
+      tokenLineStartOffset = pos;
+      return token = 14;
+    }
+    switch (code) {
+      case 123:
+        pos++;
+        return token = 1;
+      case 125:
+        pos++;
+        return token = 2;
+      case 91:
+        pos++;
+        return token = 3;
+      case 93:
+        pos++;
+        return token = 4;
+      case 58:
+        pos++;
+        return token = 6;
+      case 44:
+        pos++;
+        return token = 5;
+      case 34:
+        pos++;
+        value = scanString();
+        return token = 10;
+      case 47:
+        const start = pos - 1;
+        if (text.charCodeAt(pos + 1) === 47) {
+          pos += 2;
+          while (pos < len) {
+            if (isLineBreak(text.charCodeAt(pos))) {
+              break;
+            }
+            pos++;
+          }
+          value = text.substring(start, pos);
+          return token = 12;
+        }
+        if (text.charCodeAt(pos + 1) === 42) {
+          pos += 2;
+          const safeLength = len - 1;
+          let commentClosed = false;
+          while (pos < safeLength) {
+            const ch = text.charCodeAt(pos);
+            if (ch === 42 && text.charCodeAt(pos + 1) === 47) {
+              pos += 2;
+              commentClosed = true;
+              break;
+            }
+            pos++;
+            if (isLineBreak(ch)) {
+              if (ch === 13 && text.charCodeAt(pos) === 10) {
+                pos++;
+              }
+              lineNumber++;
+              tokenLineStartOffset = pos;
+            }
+          }
+          if (!commentClosed) {
+            pos++;
+            scanError = 1;
+          }
+          value = text.substring(start, pos);
+          return token = 13;
+        }
+        value += String.fromCharCode(code);
+        pos++;
+        return token = 16;
+      case 45:
+        value += String.fromCharCode(code);
+        pos++;
+        if (pos === len || !isDigit(text.charCodeAt(pos))) {
+          return token = 16;
+        }
+      case 48:
+      case 49:
+      case 50:
+      case 51:
+      case 52:
+      case 53:
+      case 54:
+      case 55:
+      case 56:
+      case 57:
+        value += scanNumber();
+        return token = 11;
+      default:
+        while (pos < len && isUnknownContentCharacter(code)) {
+          pos++;
+          code = text.charCodeAt(pos);
+        }
+        if (tokenOffset !== pos) {
+          value = text.substring(tokenOffset, pos);
+          switch (value) {
+            case "true":
+              return token = 8;
+            case "false":
+              return token = 9;
+            case "null":
+              return token = 7;
+          }
+          return token = 16;
+        }
+        value += String.fromCharCode(code);
+        pos++;
+        return token = 16;
+    }
+  }
+  function isUnknownContentCharacter(code) {
+    if (isWhiteSpace(code) || isLineBreak(code)) {
+      return false;
+    }
+    switch (code) {
+      case 125:
+      case 93:
+      case 123:
+      case 91:
+      case 34:
+      case 58:
+      case 44:
+      case 47:
+        return false;
+    }
+    return true;
+  }
+  function scanNextNonTrivia() {
+    let result;
+    do {
+      result = scanNext();
+    } while (result >= 12 && result <= 15);
+    return result;
+  }
+  return {
+    setPosition,
+    getPosition: () => pos,
+    scan: ignoreTrivia ? scanNextNonTrivia : scanNext,
+    getToken: () => token,
+    getTokenValue: () => value,
+    getTokenOffset: () => tokenOffset,
+    getTokenLength: () => pos - tokenOffset,
+    getTokenStartLine: () => lineStartOffset,
+    getTokenStartCharacter: () => tokenOffset - prevTokenLineStartOffset,
+    getTokenError: () => scanError
+  };
+}
+function isWhiteSpace(ch) {
+  return ch === 32 || ch === 9;
+}
+function isLineBreak(ch) {
+  return ch === 10 || ch === 13;
+}
+function isDigit(ch) {
+  return ch >= 48 && ch <= 57;
+}
+var CharacterCodes;
+(function(CharacterCodes2) {
+  CharacterCodes2[CharacterCodes2["lineFeed"] = 10] = "lineFeed";
+  CharacterCodes2[CharacterCodes2["carriageReturn"] = 13] = "carriageReturn";
+  CharacterCodes2[CharacterCodes2["space"] = 32] = "space";
+  CharacterCodes2[CharacterCodes2["_0"] = 48] = "_0";
+  CharacterCodes2[CharacterCodes2["_1"] = 49] = "_1";
+  CharacterCodes2[CharacterCodes2["_2"] = 50] = "_2";
+  CharacterCodes2[CharacterCodes2["_3"] = 51] = "_3";
+  CharacterCodes2[CharacterCodes2["_4"] = 52] = "_4";
+  CharacterCodes2[CharacterCodes2["_5"] = 53] = "_5";
+  CharacterCodes2[CharacterCodes2["_6"] = 54] = "_6";
+  CharacterCodes2[CharacterCodes2["_7"] = 55] = "_7";
+  CharacterCodes2[CharacterCodes2["_8"] = 56] = "_8";
+  CharacterCodes2[CharacterCodes2["_9"] = 57] = "_9";
+  CharacterCodes2[CharacterCodes2["a"] = 97] = "a";
+  CharacterCodes2[CharacterCodes2["b"] = 98] = "b";
+  CharacterCodes2[CharacterCodes2["c"] = 99] = "c";
+  CharacterCodes2[CharacterCodes2["d"] = 100] = "d";
+  CharacterCodes2[CharacterCodes2["e"] = 101] = "e";
+  CharacterCodes2[CharacterCodes2["f"] = 102] = "f";
+  CharacterCodes2[CharacterCodes2["g"] = 103] = "g";
+  CharacterCodes2[CharacterCodes2["h"] = 104] = "h";
+  CharacterCodes2[CharacterCodes2["i"] = 105] = "i";
+  CharacterCodes2[CharacterCodes2["j"] = 106] = "j";
+  CharacterCodes2[CharacterCodes2["k"] = 107] = "k";
+  CharacterCodes2[CharacterCodes2["l"] = 108] = "l";
+  CharacterCodes2[CharacterCodes2["m"] = 109] = "m";
+  CharacterCodes2[CharacterCodes2["n"] = 110] = "n";
+  CharacterCodes2[CharacterCodes2["o"] = 111] = "o";
+  CharacterCodes2[CharacterCodes2["p"] = 112] = "p";
+  CharacterCodes2[CharacterCodes2["q"] = 113] = "q";
+  CharacterCodes2[CharacterCodes2["r"] = 114] = "r";
+  CharacterCodes2[CharacterCodes2["s"] = 115] = "s";
+  CharacterCodes2[CharacterCodes2["t"] = 116] = "t";
+  CharacterCodes2[CharacterCodes2["u"] = 117] = "u";
+  CharacterCodes2[CharacterCodes2["v"] = 118] = "v";
+  CharacterCodes2[CharacterCodes2["w"] = 119] = "w";
+  CharacterCodes2[CharacterCodes2["x"] = 120] = "x";
+  CharacterCodes2[CharacterCodes2["y"] = 121] = "y";
+  CharacterCodes2[CharacterCodes2["z"] = 122] = "z";
+  CharacterCodes2[CharacterCodes2["A"] = 65] = "A";
+  CharacterCodes2[CharacterCodes2["B"] = 66] = "B";
+  CharacterCodes2[CharacterCodes2["C"] = 67] = "C";
+  CharacterCodes2[CharacterCodes2["D"] = 68] = "D";
+  CharacterCodes2[CharacterCodes2["E"] = 69] = "E";
+  CharacterCodes2[CharacterCodes2["F"] = 70] = "F";
+  CharacterCodes2[CharacterCodes2["G"] = 71] = "G";
+  CharacterCodes2[CharacterCodes2["H"] = 72] = "H";
+  CharacterCodes2[CharacterCodes2["I"] = 73] = "I";
+  CharacterCodes2[CharacterCodes2["J"] = 74] = "J";
+  CharacterCodes2[CharacterCodes2["K"] = 75] = "K";
+  CharacterCodes2[CharacterCodes2["L"] = 76] = "L";
+  CharacterCodes2[CharacterCodes2["M"] = 77] = "M";
+  CharacterCodes2[CharacterCodes2["N"] = 78] = "N";
+  CharacterCodes2[CharacterCodes2["O"] = 79] = "O";
+  CharacterCodes2[CharacterCodes2["P"] = 80] = "P";
+  CharacterCodes2[CharacterCodes2["Q"] = 81] = "Q";
+  CharacterCodes2[CharacterCodes2["R"] = 82] = "R";
+  CharacterCodes2[CharacterCodes2["S"] = 83] = "S";
+  CharacterCodes2[CharacterCodes2["T"] = 84] = "T";
+  CharacterCodes2[CharacterCodes2["U"] = 85] = "U";
+  CharacterCodes2[CharacterCodes2["V"] = 86] = "V";
+  CharacterCodes2[CharacterCodes2["W"] = 87] = "W";
+  CharacterCodes2[CharacterCodes2["X"] = 88] = "X";
+  CharacterCodes2[CharacterCodes2["Y"] = 89] = "Y";
+  CharacterCodes2[CharacterCodes2["Z"] = 90] = "Z";
+  CharacterCodes2[CharacterCodes2["asterisk"] = 42] = "asterisk";
+  CharacterCodes2[CharacterCodes2["backslash"] = 92] = "backslash";
+  CharacterCodes2[CharacterCodes2["closeBrace"] = 125] = "closeBrace";
+  CharacterCodes2[CharacterCodes2["closeBracket"] = 93] = "closeBracket";
+  CharacterCodes2[CharacterCodes2["colon"] = 58] = "colon";
+  CharacterCodes2[CharacterCodes2["comma"] = 44] = "comma";
+  CharacterCodes2[CharacterCodes2["dot"] = 46] = "dot";
+  CharacterCodes2[CharacterCodes2["doubleQuote"] = 34] = "doubleQuote";
+  CharacterCodes2[CharacterCodes2["minus"] = 45] = "minus";
+  CharacterCodes2[CharacterCodes2["openBrace"] = 123] = "openBrace";
+  CharacterCodes2[CharacterCodes2["openBracket"] = 91] = "openBracket";
+  CharacterCodes2[CharacterCodes2["plus"] = 43] = "plus";
+  CharacterCodes2[CharacterCodes2["slash"] = 47] = "slash";
+  CharacterCodes2[CharacterCodes2["formFeed"] = 12] = "formFeed";
+  CharacterCodes2[CharacterCodes2["tab"] = 9] = "tab";
+})(CharacterCodes || (CharacterCodes = {}));
+
+// ../../../../../node_modules/.bun/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/string-intern.js
+var cachedSpaces = new Array(20).fill(0).map((_, index) => {
+  return " ".repeat(index);
+});
+var maxCachedValues = 200;
+var cachedBreakLinesWithSpaces = {
+  " ": {
+    "\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return `
+` + " ".repeat(index);
+    }),
+    "\r": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\r" + " ".repeat(index);
+    }),
+    "\r\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return `\r
+` + " ".repeat(index);
+    })
+  },
+  "\t": {
+    "\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return `
+` + "\t".repeat(index);
+    }),
+    "\r": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return "\r" + "\t".repeat(index);
+    }),
+    "\r\n": new Array(maxCachedValues).fill(0).map((_, index) => {
+      return `\r
+` + "\t".repeat(index);
+    })
+  }
+};
+
+// ../../../../../node_modules/.bun/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/impl/parser.js
+var ParseOptions;
+(function(ParseOptions2) {
+  ParseOptions2.DEFAULT = {
+    allowTrailingComma: false
+  };
+})(ParseOptions || (ParseOptions = {}));
+function parse(text, errors = [], options = ParseOptions.DEFAULT) {
+  let currentProperty = null;
+  let currentParent = [];
+  const previousParents = [];
+  function onValue(value) {
+    if (Array.isArray(currentParent)) {
+      currentParent.push(value);
+    } else if (currentProperty !== null) {
+      currentParent[currentProperty] = value;
+    }
+  }
+  const visitor = {
+    onObjectBegin: () => {
+      const object = {};
+      onValue(object);
+      previousParents.push(currentParent);
+      currentParent = object;
+      currentProperty = null;
+    },
+    onObjectProperty: (name) => {
+      currentProperty = name;
+    },
+    onObjectEnd: () => {
+      currentParent = previousParents.pop();
+    },
+    onArrayBegin: () => {
+      const array = [];
+      onValue(array);
+      previousParents.push(currentParent);
+      currentParent = array;
+      currentProperty = null;
+    },
+    onArrayEnd: () => {
+      currentParent = previousParents.pop();
+    },
+    onLiteralValue: onValue,
+    onError: (error, offset, length) => {
+      errors.push({ error, offset, length });
+    }
+  };
+  visit(text, visitor, options);
+  return currentParent[0];
+}
+function visit(text, visitor, options = ParseOptions.DEFAULT) {
+  const _scanner = createScanner(text, false);
+  const _jsonPath = [];
+  let suppressedCallbacks = 0;
+  function toNoArgVisit(visitFunction) {
+    return visitFunction ? () => suppressedCallbacks === 0 && visitFunction(_scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter()) : () => true;
+  }
+  function toOneArgVisit(visitFunction) {
+    return visitFunction ? (arg) => suppressedCallbacks === 0 && visitFunction(arg, _scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter()) : () => true;
+  }
+  function toOneArgVisitWithPath(visitFunction) {
+    return visitFunction ? (arg) => suppressedCallbacks === 0 && visitFunction(arg, _scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter(), () => _jsonPath.slice()) : () => true;
+  }
+  function toBeginVisit(visitFunction) {
+    return visitFunction ? () => {
+      if (suppressedCallbacks > 0) {
+        suppressedCallbacks++;
+      } else {
+        let cbReturn = visitFunction(_scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter(), () => _jsonPath.slice());
+        if (cbReturn === false) {
+          suppressedCallbacks = 1;
+        }
+      }
+    } : () => true;
+  }
+  function toEndVisit(visitFunction) {
+    return visitFunction ? () => {
+      if (suppressedCallbacks > 0) {
+        suppressedCallbacks--;
+      }
+      if (suppressedCallbacks === 0) {
+        visitFunction(_scanner.getTokenOffset(), _scanner.getTokenLength(), _scanner.getTokenStartLine(), _scanner.getTokenStartCharacter());
+      }
+    } : () => true;
+  }
+  const onObjectBegin = toBeginVisit(visitor.onObjectBegin), onObjectProperty = toOneArgVisitWithPath(visitor.onObjectProperty), onObjectEnd = toEndVisit(visitor.onObjectEnd), onArrayBegin = toBeginVisit(visitor.onArrayBegin), onArrayEnd = toEndVisit(visitor.onArrayEnd), onLiteralValue = toOneArgVisitWithPath(visitor.onLiteralValue), onSeparator = toOneArgVisit(visitor.onSeparator), onComment = toNoArgVisit(visitor.onComment), onError = toOneArgVisit(visitor.onError);
+  const disallowComments = options && options.disallowComments;
+  const allowTrailingComma = options && options.allowTrailingComma;
+  function scanNext() {
+    while (true) {
+      const token = _scanner.scan();
+      switch (_scanner.getTokenError()) {
+        case 4:
+          handleError(14);
+          break;
+        case 5:
+          handleError(15);
+          break;
+        case 3:
+          handleError(13);
+          break;
+        case 1:
+          if (!disallowComments) {
+            handleError(11);
+          }
+          break;
+        case 2:
+          handleError(12);
+          break;
+        case 6:
+          handleError(16);
+          break;
+      }
+      switch (token) {
+        case 12:
+        case 13:
+          if (disallowComments) {
+            handleError(10);
+          } else {
+            onComment();
+          }
+          break;
+        case 16:
+          handleError(1);
+          break;
+        case 15:
+        case 14:
+          break;
+        default:
+          return token;
+      }
+    }
+  }
+  function handleError(error, skipUntilAfter = [], skipUntil = []) {
+    onError(error);
+    if (skipUntilAfter.length + skipUntil.length > 0) {
+      let token = _scanner.getToken();
+      while (token !== 17) {
+        if (skipUntilAfter.indexOf(token) !== -1) {
+          scanNext();
+          break;
+        } else if (skipUntil.indexOf(token) !== -1) {
+          break;
+        }
+        token = scanNext();
+      }
+    }
+  }
+  function parseString(isValue) {
+    const value = _scanner.getTokenValue();
+    if (isValue) {
+      onLiteralValue(value);
+    } else {
+      onObjectProperty(value);
+      _jsonPath.push(value);
+    }
+    scanNext();
+    return true;
+  }
+  function parseLiteral() {
+    switch (_scanner.getToken()) {
+      case 11:
+        const tokenValue = _scanner.getTokenValue();
+        let value = Number(tokenValue);
+        if (isNaN(value)) {
+          handleError(2);
+          value = 0;
+        }
+        onLiteralValue(value);
+        break;
+      case 7:
+        onLiteralValue(null);
+        break;
+      case 8:
+        onLiteralValue(true);
+        break;
+      case 9:
+        onLiteralValue(false);
+        break;
+      default:
+        return false;
+    }
+    scanNext();
+    return true;
+  }
+  function parseProperty() {
+    if (_scanner.getToken() !== 10) {
+      handleError(3, [], [2, 5]);
+      return false;
+    }
+    parseString(false);
+    if (_scanner.getToken() === 6) {
+      onSeparator(":");
+      scanNext();
+      if (!parseValue()) {
+        handleError(4, [], [2, 5]);
+      }
+    } else {
+      handleError(5, [], [2, 5]);
+    }
+    _jsonPath.pop();
+    return true;
+  }
+  function parseObject() {
+    onObjectBegin();
+    scanNext();
+    let needsComma = false;
+    while (_scanner.getToken() !== 2 && _scanner.getToken() !== 17) {
+      if (_scanner.getToken() === 5) {
+        if (!needsComma) {
+          handleError(4, [], []);
+        }
+        onSeparator(",");
+        scanNext();
+        if (_scanner.getToken() === 2 && allowTrailingComma) {
+          break;
+        }
+      } else if (needsComma) {
+        handleError(6, [], []);
+      }
+      if (!parseProperty()) {
+        handleError(4, [], [2, 5]);
+      }
+      needsComma = true;
+    }
+    onObjectEnd();
+    if (_scanner.getToken() !== 2) {
+      handleError(7, [2], []);
+    } else {
+      scanNext();
+    }
+    return true;
+  }
+  function parseArray() {
+    onArrayBegin();
+    scanNext();
+    let isFirstElement = true;
+    let needsComma = false;
+    while (_scanner.getToken() !== 4 && _scanner.getToken() !== 17) {
+      if (_scanner.getToken() === 5) {
+        if (!needsComma) {
+          handleError(4, [], []);
+        }
+        onSeparator(",");
+        scanNext();
+        if (_scanner.getToken() === 4 && allowTrailingComma) {
+          break;
+        }
+      } else if (needsComma) {
+        handleError(6, [], []);
+      }
+      if (isFirstElement) {
+        _jsonPath.push(0);
+        isFirstElement = false;
+      } else {
+        _jsonPath[_jsonPath.length - 1]++;
+      }
+      if (!parseValue()) {
+        handleError(4, [], [4, 5]);
+      }
+      needsComma = true;
+    }
+    onArrayEnd();
+    if (!isFirstElement) {
+      _jsonPath.pop();
+    }
+    if (_scanner.getToken() !== 4) {
+      handleError(8, [4], []);
+    } else {
+      scanNext();
+    }
+    return true;
+  }
+  function parseValue() {
+    switch (_scanner.getToken()) {
+      case 3:
+        return parseArray();
+      case 1:
+        return parseObject();
+      case 10:
+        return parseString(true);
+      default:
+        return parseLiteral();
+    }
+  }
+  scanNext();
+  if (_scanner.getToken() === 17) {
+    if (options.allowEmptyContent) {
+      return true;
+    }
+    handleError(4, [], []);
+    return false;
+  }
+  if (!parseValue()) {
+    handleError(4, [], []);
+    return false;
+  }
+  if (_scanner.getToken() !== 17) {
+    handleError(9, [], []);
+  }
+  return true;
+}
+
+// ../../../../../node_modules/.bun/jsonc-parser@3.3.1/node_modules/jsonc-parser/lib/esm/main.js
+var ScanError;
+(function(ScanError2) {
+  ScanError2[ScanError2["None"] = 0] = "None";
+  ScanError2[ScanError2["UnexpectedEndOfComment"] = 1] = "UnexpectedEndOfComment";
+  ScanError2[ScanError2["UnexpectedEndOfString"] = 2] = "UnexpectedEndOfString";
+  ScanError2[ScanError2["UnexpectedEndOfNumber"] = 3] = "UnexpectedEndOfNumber";
+  ScanError2[ScanError2["InvalidUnicode"] = 4] = "InvalidUnicode";
+  ScanError2[ScanError2["InvalidEscapeCharacter"] = 5] = "InvalidEscapeCharacter";
+  ScanError2[ScanError2["InvalidCharacter"] = 6] = "InvalidCharacter";
+})(ScanError || (ScanError = {}));
+var SyntaxKind;
+(function(SyntaxKind2) {
+  SyntaxKind2[SyntaxKind2["OpenBraceToken"] = 1] = "OpenBraceToken";
+  SyntaxKind2[SyntaxKind2["CloseBraceToken"] = 2] = "CloseBraceToken";
+  SyntaxKind2[SyntaxKind2["OpenBracketToken"] = 3] = "OpenBracketToken";
+  SyntaxKind2[SyntaxKind2["CloseBracketToken"] = 4] = "CloseBracketToken";
+  SyntaxKind2[SyntaxKind2["CommaToken"] = 5] = "CommaToken";
+  SyntaxKind2[SyntaxKind2["ColonToken"] = 6] = "ColonToken";
+  SyntaxKind2[SyntaxKind2["NullKeyword"] = 7] = "NullKeyword";
+  SyntaxKind2[SyntaxKind2["TrueKeyword"] = 8] = "TrueKeyword";
+  SyntaxKind2[SyntaxKind2["FalseKeyword"] = 9] = "FalseKeyword";
+  SyntaxKind2[SyntaxKind2["StringLiteral"] = 10] = "StringLiteral";
+  SyntaxKind2[SyntaxKind2["NumericLiteral"] = 11] = "NumericLiteral";
+  SyntaxKind2[SyntaxKind2["LineCommentTrivia"] = 12] = "LineCommentTrivia";
+  SyntaxKind2[SyntaxKind2["BlockCommentTrivia"] = 13] = "BlockCommentTrivia";
+  SyntaxKind2[SyntaxKind2["LineBreakTrivia"] = 14] = "LineBreakTrivia";
+  SyntaxKind2[SyntaxKind2["Trivia"] = 15] = "Trivia";
+  SyntaxKind2[SyntaxKind2["Unknown"] = 16] = "Unknown";
+  SyntaxKind2[SyntaxKind2["EOF"] = 17] = "EOF";
+})(SyntaxKind || (SyntaxKind = {}));
+var parse2 = parse;
+var ParseErrorCode;
+(function(ParseErrorCode2) {
+  ParseErrorCode2[ParseErrorCode2["InvalidSymbol"] = 1] = "InvalidSymbol";
+  ParseErrorCode2[ParseErrorCode2["InvalidNumberFormat"] = 2] = "InvalidNumberFormat";
+  ParseErrorCode2[ParseErrorCode2["PropertyNameExpected"] = 3] = "PropertyNameExpected";
+  ParseErrorCode2[ParseErrorCode2["ValueExpected"] = 4] = "ValueExpected";
+  ParseErrorCode2[ParseErrorCode2["ColonExpected"] = 5] = "ColonExpected";
+  ParseErrorCode2[ParseErrorCode2["CommaExpected"] = 6] = "CommaExpected";
+  ParseErrorCode2[ParseErrorCode2["CloseBraceExpected"] = 7] = "CloseBraceExpected";
+  ParseErrorCode2[ParseErrorCode2["CloseBracketExpected"] = 8] = "CloseBracketExpected";
+  ParseErrorCode2[ParseErrorCode2["EndOfFileExpected"] = 9] = "EndOfFileExpected";
+  ParseErrorCode2[ParseErrorCode2["InvalidCommentToken"] = 10] = "InvalidCommentToken";
+  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfComment"] = 11] = "UnexpectedEndOfComment";
+  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfString"] = 12] = "UnexpectedEndOfString";
+  ParseErrorCode2[ParseErrorCode2["UnexpectedEndOfNumber"] = 13] = "UnexpectedEndOfNumber";
+  ParseErrorCode2[ParseErrorCode2["InvalidUnicode"] = 14] = "InvalidUnicode";
+  ParseErrorCode2[ParseErrorCode2["InvalidEscapeCharacter"] = 15] = "InvalidEscapeCharacter";
+  ParseErrorCode2[ParseErrorCode2["InvalidCharacter"] = 16] = "InvalidCharacter";
+})(ParseErrorCode || (ParseErrorCode = {}));
+function printParseErrorCode(code) {
+  switch (code) {
+    case 1:
+      return "InvalidSymbol";
+    case 2:
+      return "InvalidNumberFormat";
+    case 3:
+      return "PropertyNameExpected";
+    case 4:
+      return "ValueExpected";
+    case 5:
+      return "ColonExpected";
+    case 6:
+      return "CommaExpected";
+    case 7:
+      return "CloseBraceExpected";
+    case 8:
+      return "CloseBracketExpected";
+    case 9:
+      return "EndOfFileExpected";
+    case 10:
+      return "InvalidCommentToken";
+    case 11:
+      return "UnexpectedEndOfComment";
+    case 12:
+      return "UnexpectedEndOfString";
+    case 13:
+      return "UnexpectedEndOfNumber";
+    case 14:
+      return "InvalidUnicode";
+    case 15:
+      return "InvalidEscapeCharacter";
+    case 16:
+      return "InvalidCharacter";
+  }
+  return "<unknown ParseErrorCode>";
+}
+
+// ../../../../utils/src/jsonc-parser.ts
+var pluginConfigFileDetectionCache = new Map;
+function stripBom(content) {
+  return content.charCodeAt(0) === 65279 ? content.slice(1) : content;
+}
+function parseJsoncSafe(content) {
+  const errors = [];
+  const data = parse2(stripBom(content), errors, {
+    allowTrailingComma: true,
+    disallowComments: false
+  });
+  return {
+    data: errors.length > 0 ? null : data,
+    errors: errors.map((e) => ({
+      message: printParseErrorCode(e.error),
+      offset: e.offset,
+      length: e.length
+    }))
+  };
+}
+
+// ../../../../utils/src/omo-config.ts
+var HARNESS_IDS = ["codex", "opencode", "omo"];
+var SETTING_HARNESS_SUPPORT = {
+  "codegraph.auto_provision": HARNESS_IDS,
+  "codegraph.daemon": ["codex", "opencode"],
+  "codegraph.enabled": HARNESS_IDS,
+  "codegraph.excluded_roots": ["codex", "opencode"],
+  "codegraph.install_dir": HARNESS_IDS,
+  "codegraph.telemetry": HARNESS_IDS,
+  "codegraph.watch_debounce_ms": ["opencode", "omo"]
+};
+
+// ../../../../utils/src/omo-config/body.ts
+var BUILT_IN_DEFAULTS = {
+  codegraph: {
+    auto_provision: true,
+    enabled: true,
+    telemetry: false
+  }
+};
+var HARNESS_BLOCK_KEYS = HARNESS_IDS.map((harness) => `[${harness}]`);
+var CODEGRAPH_SETTING_KEYS = [
+  "auto_provision",
+  "daemon",
+  "enabled",
+  "excluded_roots",
+  "install_dir",
+  "telemetry",
+  "watch_debounce_ms"
+];
+function isRecord(value) {
+  return isPlainObject(value);
+}
+function hasOwn(record, key) {
+  return Object.prototype.hasOwnProperty.call(record, key);
+}
+function isCodegraphSettingKey(key) {
+  return CODEGRAPH_SETTING_KEYS.some((candidate) => candidate === key);
+}
+function mergeValues(base, override) {
+  if (override === undefined)
+    return base;
+  if (Array.isArray(base) && Array.isArray(override)) {
+    return [...new Set([...base, ...override])];
+  }
+  if (isPlainObject(base) && isPlainObject(override)) {
+    const result = { ...base };
+    for (const [key, value] of Object.entries(override)) {
+      if (isUnsafeObjectKey(key))
+        continue;
+      result[key] = mergeValues(result[key], value);
+    }
+    return result;
+  }
+  return override;
+}
+function mergeCodegraphConfig(base, override) {
+  const merged = mergeValues(base, override);
+  if (!isRecord(merged))
+    return;
+  const codegraph = {};
+  for (const key of CODEGRAPH_SETTING_KEYS) {
+    if (!hasOwn(merged, key))
+      continue;
+    setCodegraphSetting(codegraph, key, merged[key]);
+  }
+  return Object.keys(codegraph).length > 0 ? codegraph : undefined;
+}
+function mergeOmoConfig(base, override) {
+  const codegraph = mergeCodegraphConfig(base.codegraph, override.codegraph);
+  return {
+    ...codegraph === undefined ? {} : { codegraph }
+  };
+}
+function isHarnessBlockKey(key) {
+  return key.startsWith("[") && key.endsWith("]");
+}
+function isKnownHarnessBlockKey(key) {
+  return HARNESS_BLOCK_KEYS.includes(key);
+}
+function validateCodegraphValue(key, value) {
+  if (key === "excluded_roots") {
+    return Array.isArray(value) && value.every((entry) => typeof entry === "string") ? null : "must be an array of strings";
+  }
+  if (key === "install_dir")
+    return typeof value === "string" ? null : "must be a string";
+  if (key === "watch_debounce_ms") {
+    return typeof value === "number" && Number.isFinite(value) && value >= 0 ? null : "must be a non-negative finite number";
+  }
+  return typeof value === "boolean" ? null : "must be a boolean";
+}
+function setCodegraphSetting(config, key, value) {
+  switch (key) {
+    case "auto_provision":
+      if (typeof value === "boolean")
+        config.auto_provision = value;
+      return;
+    case "daemon":
+      if (typeof value === "boolean")
+        config.daemon = value;
+      return;
+    case "enabled":
+      if (typeof value === "boolean")
+        config.enabled = value;
+      return;
+    case "excluded_roots":
+      if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+        config.excluded_roots = value;
+      }
+      return;
+    case "install_dir":
+      if (typeof value === "string")
+        config.install_dir = value;
+      return;
+    case "telemetry":
+      if (typeof value === "boolean")
+        config.telemetry = value;
+      return;
+    case "watch_debounce_ms":
+      if (typeof value === "number")
+        config.watch_debounce_ms = value;
+      return;
+  }
+}
+function normalizeCodegraphSection(section, pathPrefix, warnings) {
+  if (!isRecord(section)) {
+    warnings.push(`${pathPrefix} must be an object`);
+    return {};
+  }
+  const codegraph = {};
+  for (const [key, value] of Object.entries(section)) {
+    if (!isCodegraphSettingKey(key)) {
+      warnings.push(`${pathPrefix}.${key} is not a supported setting`);
+      continue;
+    }
+    const error = validateCodegraphValue(key, value);
+    if (error !== null) {
+      warnings.push(`${pathPrefix}.${key} ${error}`);
+      continue;
+    }
+    setCodegraphSetting(codegraph, key, value);
+  }
+  return codegraph;
+}
+function normalizeConfigBody(value, pathPrefix, warnings) {
+  if (!isRecord(value)) {
+    warnings.push(`${pathPrefix} must be an object`);
+    return {};
+  }
+  const config = {};
+  for (const [key, section] of Object.entries(value)) {
+    if (key === "codegraph") {
+      config.codegraph = normalizeCodegraphSection(section, `${pathPrefix}.codegraph`, warnings);
+      continue;
+    }
+    if (isHarnessBlockKey(key)) {
+      if (!isKnownHarnessBlockKey(key)) {
+        warnings.push(`Unknown harness override block "${key}"`);
+      }
+      continue;
+    }
+    warnings.push(`${pathPrefix}.${key} is not a supported setting`);
+  }
+  return config;
+}
+function normalizeActiveHarnessBlock(value, harness, pathPrefix, warnings) {
+  if (!isRecord(value))
+    return {};
+  const blockKey = `[${harness}]`;
+  if (!hasOwn(value, blockKey))
+    return {};
+  return normalizeConfigBody(value[blockKey], `${pathPrefix}.${blockKey}`, warnings);
+}
+function loadConfigFile(path, harness) {
+  try {
+    const content = readFileSync(path, "utf-8");
+    const parsed = parseJsoncSafe(content);
+    if (parsed.errors.length > 0) {
+      return {
+        config: {},
+        loaded: false,
+        warnings: parsed.errors.map((error) => `JSONC parse error in ${path}: ${error.message} at offset ${error.offset}`)
+      };
+    }
+    const warnings = [];
+    const baseConfig = normalizeConfigBody(parsed.data, "config", warnings);
+    const harnessConfig = normalizeActiveHarnessBlock(parsed.data, harness, "config", warnings);
+    return {
+      config: mergeOmoConfig(baseConfig, harnessConfig),
+      loaded: true,
+      warnings
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      config: {},
+      loaded: false,
+      warnings: [`Failed to read ${path}: ${message}`]
+    };
+  }
+}
+function validateHarnessApplicability(config, harness) {
+  const warnings = [];
+  const codegraph = config.codegraph;
+  if (codegraph === undefined)
+    return warnings;
+  for (const key of Object.keys(codegraph)) {
+    if (!isCodegraphSettingKey(key))
+      continue;
+    const settingPath = `codegraph.${key}`;
+    const supportedHarnesses = SETTING_HARNESS_SUPPORT[settingPath];
+    if (supportedHarnesses === undefined)
+      continue;
+    if (!supportedHarnesses.includes(harness)) {
+      warnings.push(`${settingPath} is not supported for harness ${harness}`);
+    }
+  }
+  return warnings;
+}
+
+// ../../../../utils/src/omo-config/env-overrides.ts
+var CODEGRAPH_ENV_KEYS = [
+  ["auto_provision", "AUTO_PROVISION", "boolean"],
+  ["enabled", "ENABLED", "boolean"],
+  ["install_dir", "INSTALL_DIR", "string"],
+  ["telemetry", "TELEMETRY", "boolean"],
+  ["watch_debounce_ms", "WATCH_DEBOUNCE_MS", "number"]
+];
+function parseBooleanEnv(value) {
+  const normalized = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized))
+    return true;
+  if (["0", "false", "no", "off"].includes(normalized))
+    return false;
+  return null;
+}
+function parseEnvValue(value, kind) {
+  if (kind === "boolean")
+    return parseBooleanEnv(value);
+  if (kind === "number") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  }
+  return value;
+}
+function setCodegraphSetting2(config, key, value) {
+  switch (key) {
+    case "auto_provision":
+      if (typeof value === "boolean")
+        config.auto_provision = value;
+      return;
+    case "enabled":
+      if (typeof value === "boolean")
+        config.enabled = value;
+      return;
+    case "excluded_roots":
+      if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+        config.excluded_roots = value;
+      }
+      return;
+    case "install_dir":
+      if (typeof value === "string")
+        config.install_dir = value;
+      return;
+    case "telemetry":
+      if (typeof value === "boolean")
+        config.telemetry = value;
+      return;
+    case "watch_debounce_ms":
+      if (typeof value === "number")
+        config.watch_debounce_ms = value;
+      return;
+  }
+}
+function buildEnvOverrides(harness, env, warnings, merge) {
+  let config = {};
+  for (const prefix of ["OMO", harness.toUpperCase()]) {
+    const codegraph = {};
+    for (const [settingKey, envSuffix, kind] of CODEGRAPH_ENV_KEYS) {
+      const envKey = `${prefix}_CODEGRAPH_${envSuffix}`;
+      const rawValue = env[envKey];
+      if (rawValue === undefined)
+        continue;
+      const parsed = parseEnvValue(rawValue, kind);
+      if (parsed === null) {
+        warnings.push(`${envKey} has invalid ${kind} value "${rawValue}"`);
+        continue;
+      }
+      setCodegraphSetting2(codegraph, settingKey, parsed);
+    }
+    if (Object.keys(codegraph).length > 0) {
+      config = merge(config, { codegraph });
+    }
+  }
+  return config;
+}
+
+// ../../../../utils/src/omo-config/resolve.ts
+import { existsSync as existsSync3 } from "node:fs";
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join6, relative, resolve as resolve2 } from "node:path";
+function containsPath(parent, child) {
+  const pathToChild = relative(parent, child);
+  return pathToChild === "" || !pathToChild.startsWith("..") && !isAbsolute2(pathToChild);
+}
+function findProjectConfigPathsNearestFirst(cwd, homeDir) {
+  const startDir = resolve2(cwd);
+  const stopBeforeDir = containsPath(resolve2(homeDir), startDir) ? resolve2(homeDir) : null;
+  const paths = [];
+  let currentDir = startDir;
+  while (true) {
+    if (stopBeforeDir !== null && currentDir === stopBeforeDir)
+      break;
+    const configPath = join6(currentDir, ".omo", "config.jsonc");
+    if (existsSync3(configPath)) {
+      paths.push(configPath);
+    }
+    const parentDir = dirname2(currentDir);
+    if (parentDir === currentDir)
+      break;
+    currentDir = parentDir;
+  }
+  return paths;
+}
+function resolveOmoConfigPaths(options) {
+  const globalPath = join6(resolve2(options.homeDir), ".omo", "config.jsonc");
+  const projectPathsFarthestFirst = findProjectConfigPathsNearestFirst(options.cwd, options.homeDir).reverse();
+  return [
+    { path: globalPath, scope: "global" },
+    ...projectPathsFarthestFirst.map((path) => ({ path, scope: "project" }))
+  ];
+}
+function toMissingSource(candidate) {
+  return {
+    exists: false,
+    loaded: false,
+    path: candidate.path,
+    scope: candidate.scope
+  };
+}
+
+// ../../../../utils/src/omo-config/loader.ts
+function loadOmoConfig(options) {
+  const cwd = options.cwd ?? process.cwd();
+  const homeDir = options.homeDir ?? process.env["HOME"] ?? process.env["USERPROFILE"] ?? homedir5();
+  const env = options.env ?? process.env;
+  let config = BUILT_IN_DEFAULTS;
+  const sources = [];
+  const warnings = [];
+  for (const candidate of resolveOmoConfigPaths({ cwd, homeDir })) {
+    if (!existsSync4(candidate.path)) {
+      if (candidate.scope === "global") {
+        sources.push(toMissingSource(candidate));
+      }
+      continue;
+    }
+    const result = loadConfigFile(candidate.path, options.harness);
+    sources.push({
+      exists: true,
+      loaded: result.loaded,
+      path: candidate.path,
+      scope: candidate.scope
+    });
+    warnings.push(...result.warnings);
+    config = mergeOmoConfig(config, result.config);
+  }
+  const envOverrides = buildEnvOverrides(options.harness, env, warnings, mergeOmoConfig);
+  config = mergeOmoConfig(config, envOverrides);
+  warnings.push(...validateHarnessApplicability(config, options.harness));
+  return { config, sources, warnings };
+}
+
+// ../../shared/src/config-loader.ts
+function getCodexOmoConfig(options = {}) {
+  const env = options.env ?? process.env;
+  const homeDir = resolveHomeDir(options);
+  const result = loadOmoConfig({
+    ...options.cwd === undefined ? {} : { cwd: options.cwd },
+    env,
+    homeDir,
+    harness: "codex"
+  });
+  const trustedConfig = loadOmoConfig({
+    cwd: homeDir,
+    env,
+    homeDir,
+    harness: "codex"
+  });
+  const trustedCodegraphInstallDir = trustedConfig.config.codegraph?.install_dir;
+  return {
+    ...result.config,
+    sources: result.sources,
+    ...trustedCodegraphInstallDir === undefined ? {} : { trustedCodegraphInstallDir },
+    warnings: result.warnings
+  };
+}
+function resolveHomeDir(options) {
+  const env = options.env ?? process.env;
+  return options.homeDir ?? env["HOME"] ?? env["USERPROFILE"] ?? homedir6();
+}
+
+// src/mcp-bridge.ts
+import { spawn } from "node:child_process";
+
+// ../../../../mcp-stdio-core/src/record.ts
+function isPlainRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+// ../../../../mcp-stdio-core/src/responses.ts
+function successResponse(id, result) {
+  return { jsonrpc: "2.0", id, result };
+}
+function errorResponse(id, code, message, data) {
+  return { jsonrpc: "2.0", id, error: data === undefined ? { code, message } : { code, message, data } };
+}
+function jsonRpcId(value) {
+  return typeof value === "string" || typeof value === "number" || value === null ? value : null;
+}
+function messageFromError(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+// ../../../../mcp-stdio-core/src/transport.ts
+var HEADER_SEPARATOR = Buffer.from(`\r
+\r
+`);
+async function* readStdioJsonRpcMessages(input) {
+  let buffer = Buffer.alloc(0);
+  for await (const chunk of input) {
+    buffer = Buffer.concat([buffer, bufferFromChunk(chunk)]);
+    while (true) {
+      const result = readNextMessage(buffer);
+      if (result.kind === "incomplete")
+        break;
+      buffer = result.remaining;
+      if (result.message)
+        yield result.message;
+    }
+  }
+  const trailing = buffer.toString("utf8").trim();
+  if (trailing.length > 0) {
+    yield parseJsonPayload(trailing, "line");
+  }
+}
+async function writeStdioJsonRpcResponse(output, response, responseMode) {
+  const body = JSON.stringify(response);
+  const payload = responseMode === "framed" ? `Content-Length: ${Buffer.byteLength(body, "utf8")}\r
+\r
+${body}` : `${body}
+`;
+  await writeChunk(output, payload);
+}
+function writeChunk(output, chunk) {
+  return new Promise((resolve3, reject) => {
+    let settled = false;
+    const onError = (error) => {
+      if (settled)
+        return;
+      settled = true;
+      reject(error);
+    };
+    output.once("error", onError);
+    try {
+      output.write(chunk, (error) => {
+        if (settled)
+          return;
+        settled = true;
+        if (error) {
+          queueMicrotask(() => output.removeListener("error", onError));
+          reject(error);
+          return;
+        }
+        output.removeListener("error", onError);
+        resolve3();
+      });
+    } catch (error) {
+      output.removeListener("error", onError);
+      if (settled)
+        return;
+      settled = true;
+      reject(error);
+    }
+  });
+}
+function readNextMessage(buffer) {
+  if (buffer.length === 0)
+    return { kind: "incomplete" };
+  return startsWithContentLength(buffer) ? readFramedMessage(buffer) : readLineMessage(buffer);
+}
+function readLineMessage(buffer) {
+  const newlineIndex = buffer.indexOf(10);
+  if (newlineIndex === -1)
+    return { kind: "incomplete" };
+  const line = buffer.subarray(0, newlineIndex).toString("utf8").replace(/\r$/, "");
+  if (line.trim().length === 0) {
+    return { kind: "complete", remaining: buffer.subarray(newlineIndex + 1) };
+  }
+  return {
+    kind: "complete",
+    message: parseJsonPayload(line, "line"),
+    remaining: buffer.subarray(newlineIndex + 1)
+  };
+}
+function readFramedMessage(buffer) {
+  const separatorIndex = buffer.indexOf(HEADER_SEPARATOR);
+  if (separatorIndex === -1)
+    return { kind: "incomplete" };
+  const headers = buffer.subarray(0, separatorIndex).toString("ascii");
+  const contentLength = parseContentLength(headers);
+  const bodyStart = separatorIndex + HEADER_SEPARATOR.length;
+  if (contentLength === undefined) {
+    return {
+      kind: "complete",
+      message: {
+        kind: "parse_error",
+        message: "Missing or invalid Content-Length header",
+        responseMode: "framed"
+      },
+      remaining: buffer.subarray(bodyStart)
+    };
+  }
+  const bodyEnd = bodyStart + contentLength;
+  if (buffer.length < bodyEnd)
+    return { kind: "incomplete" };
+  const body = buffer.subarray(bodyStart, bodyEnd).toString("utf8");
+  return {
+    kind: "complete",
+    message: parseJsonPayload(body, "framed"),
+    remaining: buffer.subarray(bodyEnd)
+  };
+}
+function startsWithContentLength(buffer) {
+  const prefix = buffer.subarray(0, "content-length:".length).toString("ascii").toLowerCase();
+  return prefix === "content-length:";
+}
+function parseContentLength(headers) {
+  for (const line of headers.split(`\r
+`)) {
+    const match = /^content-length:\s*(\d+)$/i.exec(line);
+    if (match === null)
+      continue;
+    const value = match[1];
+    if (value === undefined)
+      return;
+    return Number(value);
+  }
+  return;
+}
+function parseJsonPayload(payload, responseMode) {
+  try {
+    return { kind: "request", payload: JSON.parse(payload), responseMode };
+  } catch (error) {
+    return { kind: "parse_error", message: error instanceof Error ? error.message : String(error), responseMode };
+  }
+}
+function bufferFromChunk(chunk) {
+  if (Buffer.isBuffer(chunk))
+    return chunk;
+  if (typeof chunk === "string")
+    return Buffer.from(chunk);
+  throw new TypeError(`Unsupported stdio chunk type: ${typeof chunk}`);
+}
+
+// ../../../../mcp-stdio-core/src/server.ts
+var DEFAULT_IDLE_TIMEOUT_MS = 10 * 60000;
+var DEFAULT_PARENT_POLL_INTERVAL_MS = 30000;
+var noopLog = () => {};
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (hasErrorCode(error, "ESRCH"))
+      return false;
+    if (hasErrorCode(error, "EPERM"))
+      return true;
+    throw error;
+  }
+}
+async function runJsonRpcStdioServer(config) {
+  const log = config.log ?? noopLog;
+  const idleTimeoutMs = config.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS;
+  let isClosed = false;
+  const idleTimer = createIdleTimer(idleTimeoutMs, log, () => {
+    isClosed = true;
+    config.onIdleTimeout?.();
+  });
+  const watchdog = createParentWatchdog(config.parentWatchdog, (parentPid, pollIntervalMs) => {
+    isClosed = true;
+    log("parent_exit", { parent_pid: parentPid, poll_interval_ms: pollIntervalMs });
+    config.onParentExit?.();
+    config.input.destroy();
+  });
+  log("stdio_started", { cwd: process.cwd(), idle_timeout_ms: idleTimeoutMs });
+  idleTimer.arm();
+  try {
+    for await (const message of readStdioJsonRpcMessages(config.input)) {
+      if (isClosed)
+        break;
+      idleTimer.arm();
+      if (message.kind === "parse_error") {
+        if (!await handleParseError(message, config, log))
+          break;
+        continue;
+      }
+      if (!await handleRequest(message, config, log))
+        break;
+    }
+  } catch (error) {
+    if (!(isClosed && hasErrorCode(error, "ERR_STREAM_PREMATURE_CLOSE")))
+      throw error;
+  } finally {
+    idleTimer.clear();
+    watchdog.clear();
+    log("stdio_stopped");
+  }
+}
+async function handleParseError(message, config, log) {
+  log("parse_error", { message: message.message });
+  const response = config.parseErrorResponse?.(message.message) ?? errorResponse(null, -32700, "Parse error", message.message);
+  if (response === undefined)
+    return true;
+  return writeResponse(response, {
+    output: config.output,
+    responseMode: message.responseMode,
+    log
+  });
+}
+async function handleRequest(message, config, log) {
+  const parsed = message.payload;
+  const id = isPlainRecord(parsed) ? jsonRpcId(parsed["id"]) : null;
+  const method = isPlainRecord(parsed) && typeof parsed["method"] === "string" ? parsed["method"] : null;
+  log("request", { id: id === null ? null : String(id), method });
+  let response;
+  try {
+    response = await config.handler(parsed, config.handlerOptions);
+  } catch (error) {
+    if (config.onHandlerError === undefined)
+      throw error;
+    config.onHandlerError(error);
+    return true;
+  }
+  if (response === undefined)
+    return true;
+  if (!await writeResponse(response, {
+    output: config.output,
+    responseMode: message.responseMode,
+    log
+  }))
+    return false;
+  log("response", { id: String(response.id), method, is_error: response.error !== undefined });
+  return true;
+}
+async function writeResponse(response, context) {
+  try {
+    await writeStdioJsonRpcResponse(context.output, response, context.responseMode);
+    return true;
+  } catch (error) {
+    if (!isTerminalOutputError(error))
+      throw error;
+    context.log("output_error", { message: messageFromError(error) });
+    return false;
+  }
+}
+function isTerminalOutputError(error) {
+  if (!(error instanceof Error) || !("code" in error))
+    return false;
+  return error.code === "EPIPE" || error.code === "ERR_STREAM_DESTROYED" || error.code === "ERR_STREAM_WRITE_AFTER_END";
+}
+function hasErrorCode(error, code) {
+  return error instanceof Error && "code" in error && error.code === code;
+}
+function createParentWatchdog(config, onDeadParent) {
+  if (config === undefined)
+    return { clear: () => {} };
+  const pollIntervalMs = config.pollIntervalMs ?? DEFAULT_PARENT_POLL_INTERVAL_MS;
+  if (pollIntervalMs <= 0)
+    return { clear: () => {} };
+  const parentPid = config.parentPid ?? process.ppid;
+  const probeAlive = config.probeAlive ?? isProcessAlive;
+  let fired = false;
+  const timer = setInterval(() => {
+    if (fired || probeAlive(parentPid))
+      return;
+    fired = true;
+    onDeadParent(parentPid, pollIntervalMs);
+  }, pollIntervalMs);
+  timer.unref();
+  return {
+    clear: () => {
+      clearInterval(timer);
+    }
+  };
+}
+function createIdleTimer(idleTimeoutMs, log, onTimeout) {
+  let timer = null;
+  return {
+    arm: () => {
+      if (timer !== null)
+        clearTimeout(timer);
+      if (idleTimeoutMs <= 0)
+        return;
+      timer = setTimeout(() => {
+        log("idle_timeout", { idle_timeout_ms: idleTimeoutMs });
+        onTimeout();
+      }, idleTimeoutMs);
+      timer.unref();
+    },
+    clear: () => {
+      if (timer === null)
+        return;
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
+}
+// src/serve-invocation.ts
+import { extname } from "node:path";
+import { execPath as processExecPath } from "node:process";
+var WINDOWS_CMD_EXTENSIONS = new Set([".bat", ".cmd"]);
+var WINDOWS_NODE_SCRIPT_EXTENSIONS = new Set([".cjs", ".js", ".mjs"]);
+function resolveServeProcessInvocation(command, args, platform = process.platform) {
+  if (platform !== "win32")
+    return { args: [...args], command };
+  const extension = extname(command).toLowerCase();
+  if (WINDOWS_NODE_SCRIPT_EXTENSIONS.has(extension)) {
+    return { args: [command, ...args], command: processExecPath };
+  }
+  if (WINDOWS_CMD_EXTENSIONS.has(extension)) {
+    return { args: ["/d", "/s", "/c", command, ...args], command: "cmd.exe" };
+  }
+  return { args: [...args], command };
+}
+
+// src/mcp-bridge.ts
+class CodegraphBridgeStdioError extends Error {
+  streamName;
+  name = "CodegraphBridgeStdioError";
+  constructor(streamName) {
+    super(`CodeGraph MCP bridge missing child ${streamName}`);
+    this.streamName = streamName;
+  }
+}
+var CODEGRAPH_NODE_DESCRIPTION = "Inspect one named symbol or file. In symbol mode, includeCode=true includes leaf-symbol source when available. Container symbols such as classes, interfaces, structs, enums, modules, and namespaces return structural outlines with member lists by design. For container source, request a specific member symbol or use file mode with symbolsOnly=false plus offset/limit.";
+var CODEGRAPH_NODE_INCLUDE_CODE_DESCRIPTION = "Symbol mode: include leaf-symbol source when available. Container symbols such as classes, interfaces, structs, enums, modules, and namespaces intentionally return structural outlines with members; request a specific member symbol or use file mode with symbolsOnly=false plus offset/limit for source.";
+var CODEGRAPH_CONTAINER_OUTLINE_GUIDANCE = "Container symbols intentionally return structural outlines with members. For source, request a specific member symbol or call codegraph_node in file mode with symbolsOnly=false plus offset/limit around the symbol location.";
+var SIGKILL_ESCALATION_MS = 2000;
+async function runBridgedCodegraphProcess(command, args, options) {
+  const invocation = resolveServeProcessInvocation(command, args);
+  const child = spawn(invocation.command, invocation.args, {
+    cwd: options.cwd,
+    env: options.env,
+    stdio: ["pipe", "pipe", "inherit"]
+  });
+  const childInput = child.stdin;
+  const childOutput = child.stdout;
+  if (childInput === null)
+    throw new CodegraphBridgeStdioError("stdin");
+  if (childOutput === null)
+    throw new CodegraphBridgeStdioError("stdout");
+  const pendingResponses = new Map;
+  let defaultResponseMode = "framed";
+  const childExit = new Promise((resolveExit, reject) => {
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code !== null) {
+        resolveExit(code);
+        return;
+      }
+      resolveExit(signal === null ? 0 : 1);
+    });
+  });
+  const destroyChildPipes = () => {
+    childInput.destroy();
+    childOutput.destroy();
+  };
+  childExit.then(destroyChildPipes, destroyChildPipes);
+  let parentWatchdogFired = false;
+  const parentWatchdog = createParentWatchdog(options.parentWatchdog, () => {
+    parentWatchdogFired = true;
+    options.input.destroy();
+    destroyChildPipes();
+    terminateCodegraphChild(child);
+  });
+  const clientForwardingDone = forwardClientToCodegraph(options.input, childInput, pendingResponses, (mode) => {
+    defaultResponseMode = mode;
+  }, () => parentWatchdogFired);
+  const responseForwardingDone = forwardCodegraphToClient(childOutput, options.output, pendingResponses, () => defaultResponseMode, () => parentWatchdogFired);
+  const bridgeDone = Promise.all([clientForwardingDone, responseForwardingDone]);
+  const childAndResponsesDone = Promise.all([childExit, responseForwardingDone]).then(([exitCode]) => exitCode);
+  try {
+    return await Promise.race([childAndResponsesDone, bridgeDone.then(() => childExit)]);
+  } catch (error) {
+    destroyChildPipes();
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill("SIGKILL");
+    await childExit.catch(() => {
+      return;
+    });
+    throw error;
+  } finally {
+    parentWatchdog.clear();
+  }
+}
+function terminateCodegraphChild(child) {
+  if (child.exitCode !== null || child.signalCode !== null)
+    return;
+  child.kill("SIGTERM");
+  const escalation = setTimeout(() => {
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill("SIGKILL");
+  }, SIGKILL_ESCALATION_MS);
+  escalation.unref();
+}
+function isWatchdogTeardownError(error) {
+  if (!(error instanceof Error) || !("code" in error))
+    return false;
+  return error.code === "ERR_STREAM_PREMATURE_CLOSE" || error.code === "ERR_STREAM_DESTROYED" || error.code === "ERR_STREAM_WRITE_AFTER_END" || error.code === "EPIPE";
+}
+async function forwardClientToCodegraph(input, childInput, pendingResponses, setDefaultResponseMode, tolerateWatchdogClose) {
+  try {
+    for await (const message of readStdioJsonRpcMessages(input)) {
+      if (message.kind === "parse_error") {
+        continue;
+      }
+      const responseMode = message.responseMode;
+      setDefaultResponseMode(responseMode);
+      const key = responseModeKey(message.payload);
+      if (key !== null) {
+        pendingResponses.set(key, {
+          method: jsonRpcMethod(message.payload),
+          responseMode,
+          toolName: jsonRpcToolName(message.payload)
+        });
+      }
+      await writeLine(childInput, JSON.stringify(message.payload));
+    }
+    childInput.end();
+  } catch (error) {
+    if (!(tolerateWatchdogClose() && isWatchdogTeardownError(error)))
+      throw error;
+  }
+}
+async function forwardCodegraphToClient(childOutput, output, pendingResponses, defaultResponseMode, tolerateWatchdogClose) {
+  try {
+    for await (const message of readStdioJsonRpcMessages(childOutput)) {
+      if (message.kind === "parse_error") {
+        await writeStdioJsonRpcResponse(output, errorResponse(null, -32700, "Parse error", message.message), defaultResponseMode());
+        continue;
+      }
+      const key = responseModeKey(message.payload);
+      const pendingResponse = key === null ? undefined : pendingResponses.get(key);
+      const responseMode = pendingResponse?.responseMode ?? defaultResponseMode();
+      if (key !== null)
+        pendingResponses.delete(key);
+      await writeStdioJsonRpcResponse(output, clarifyCodegraphResponse(message.payload, pendingResponse), responseMode);
+    }
+  } catch (error) {
+    if (!(tolerateWatchdogClose() && isWatchdogTeardownError(error)))
+      throw error;
+  }
+}
+function responseModeKey(payload) {
+  if (!isPlainRecord(payload) || !("id" in payload))
+    return null;
+  const id = jsonRpcId(payload["id"]);
+  return `${typeof id}:${String(id)}`;
+}
+function jsonRpcMethod(payload) {
+  if (!isPlainRecord(payload))
+    return null;
+  const method = payload["method"];
+  return typeof method === "string" ? method : null;
+}
+function jsonRpcToolName(payload) {
+  if (jsonRpcMethod(payload) !== "tools/call" || !isPlainRecord(payload))
+    return null;
+  const params = payload["params"];
+  if (!isPlainRecord(params))
+    return null;
+  const name = params["name"];
+  return typeof name === "string" ? name : null;
+}
+function clarifyCodegraphResponse(payload, pendingResponse) {
+  if (pendingResponse?.method === "tools/list")
+    return clarifyCodegraphToolsList(payload);
+  if (pendingResponse?.method === "tools/call" && pendingResponse.toolName === "codegraph_node") {
+    return clarifyCodegraphNodeCallResult(payload);
+  }
+  return payload;
+}
+function clarifyCodegraphToolsList(payload) {
+  if (!isPlainRecord(payload))
+    return payload;
+  const result = payload["result"];
+  if (!isPlainRecord(result) || !Array.isArray(result["tools"]))
+    return payload;
+  let changed = false;
+  const tools = result["tools"].map((tool) => {
+    if (!isPlainRecord(tool) || tool["name"] !== "codegraph_node")
+      return tool;
+    if (!hasCodegraphNodeContractMetadata(tool))
+      return tool;
+    changed = true;
+    return clarifyCodegraphNodeTool(tool);
+  });
+  if (!changed)
+    return payload;
+  return { ...payload, result: { ...result, tools } };
+}
+function clarifyCodegraphNodeTool(tool) {
+  const clarified = {
+    ...tool,
+    description: CODEGRAPH_NODE_DESCRIPTION
+  };
+  const inputSchema = tool["inputSchema"];
+  if (isPlainRecord(inputSchema))
+    clarified["inputSchema"] = clarifyCodegraphNodeInputSchema(inputSchema);
+  return clarified;
+}
+function hasCodegraphNodeContractMetadata(tool) {
+  if (typeof tool["description"] === "string")
+    return true;
+  const inputSchema = tool["inputSchema"];
+  if (!isPlainRecord(inputSchema))
+    return false;
+  const properties = inputSchema["properties"];
+  return isPlainRecord(properties) && isPlainRecord(properties["includeCode"]);
+}
+function clarifyCodegraphNodeInputSchema(inputSchema) {
+  const properties = inputSchema["properties"];
+  if (!isPlainRecord(properties))
+    return inputSchema;
+  const includeCode = properties["includeCode"];
+  if (!isPlainRecord(includeCode))
+    return inputSchema;
+  return {
+    ...inputSchema,
+    properties: {
+      ...properties,
+      includeCode: {
+        ...includeCode,
+        description: CODEGRAPH_NODE_INCLUDE_CODE_DESCRIPTION
+      }
+    }
+  };
+}
+function clarifyCodegraphNodeCallResult(payload) {
+  if (!isPlainRecord(payload))
+    return payload;
+  const result = payload["result"];
+  if (!isPlainRecord(result) || !Array.isArray(result["content"]))
+    return payload;
+  let changed = false;
+  const content = result["content"].map((item) => {
+    if (!isPlainRecord(item) || item["type"] !== "text" || typeof item["text"] !== "string")
+      return item;
+    const text = clarifyContainerOutlineGuidance(item["text"]);
+    if (text === item["text"])
+      return item;
+    changed = true;
+    return { ...item, text };
+  });
+  if (!changed)
+    return payload;
+  return { ...payload, result: { ...result, content } };
+}
+function clarifyContainerOutlineGuidance(text) {
+  if (!text.includes("Structural outline only"))
+    return text;
+  return text.replace(/Structural outline only[^\n]*(?:\n[^\n]*(?:Read|read)[^\n]*)?/g, CODEGRAPH_CONTAINER_OUTLINE_GUIDANCE);
+}
+async function writeLine(output, line) {
+  if (output.write(`${line}
+`))
+    return;
+  await new Promise((resolveDrain, reject) => {
+    output.once("drain", resolveDrain);
+    output.once("error", reject);
+  });
+}
+
+// src/mcp-unavailable.ts
+async function runUnavailableCodegraphMcpServer(options) {
+  await runJsonRpcStdioServer({
+    handler: handleUnavailableCodegraphMcpRequest,
+    handlerOptions: {
+      reason: options.reason.trim(),
+      serverVersion: options.serverVersion
+    },
+    input: options.input,
+    output: options.output,
+    parentWatchdog: options.parentWatchdog ?? {}
+  });
+}
+async function handleUnavailableCodegraphMcpRequest(input, options) {
+  if (!isPlainRecord(input)) {
+    return errorResponse(null, -32600, "Invalid Request");
+  }
+  const id = jsonRpcId(input["id"]);
+  const method = input["method"];
+  if (method === "notifications/initialized")
+    return;
+  if (method === "ping")
+    return successResponse(id, {});
+  if (method === "initialize") {
+    return successResponse(id, {
+      capabilities: { tools: { listChanged: false } },
+      protocolVersion: requestedProtocolVersion(input["params"]),
+      serverInfo: { name: "codegraph", version: options.serverVersion }
+    });
+  }
+  if (method === "tools/list") {
+    return successResponse(id, { tools: [] });
+  }
+  if (method === "tools/call") {
+    return successResponse(id, {
+      content: [{ text: options.reason, type: "text" }],
+      isError: true
+    });
+  }
+  return errorResponse(id, -32601, `Method not found: ${String(method)}`);
+}
+function requestedProtocolVersion(params) {
+  if (!isPlainRecord(params) || typeof params["protocolVersion"] !== "string")
+    return "2024-11-05";
+  return params["protocolVersion"];
+}
+
+// src/session-start-worker.ts
+var SESSION_START_CWD_ENV = "OMO_CODEGRAPH_SESSION_START_CWD";
+var WINDOWS_CMD_EXTENSIONS2 = new Set([".bat", ".cmd"]);
+var WINDOWS_NODE_SCRIPT_EXTENSIONS2 = new Set([".cjs", ".js", ".mjs"]);
+
+// src/serve.ts
+var CODEGRAPH_SKIP_HINT = `CodeGraph MCP skipped: codegraph binary not found. Install CodeGraph or set OMO_CODEGRAPH_BIN.
+`;
+var CODEGRAPH_DISABLED_HINT = `CodeGraph MCP skipped: disabled by OMO SOT config. Set [codex].codegraph.enabled=true to enable it.
+`;
+var CODEGRAPH_EXCLUDED_HINT = `CodeGraph MCP skipped: project excluded by OMO CodeGraph policy.
+`;
+var CODEGRAPH_VERSION = CODEGRAPH_PINNED_VERSION;
+var PROJECT_CWD_ENV_KEYS = ["OMO_CODEGRAPH_PROJECT_CWD", SESSION_START_CWD_ENV, "PWD"];
+async function runCodegraphServe(options = {}) {
+  const env = options.env ?? processEnv;
+  const homeDir = options.homeDir ?? homedir7();
+  const wrapperCwd = options.cwd ?? processCwd();
+  const projectCwd = resolveProjectCwd(env, wrapperCwd);
+  const config = options.config ?? getCodexOmoConfig({ cwd: projectCwd, env, homeDir });
+  const codegraphConfig = config.codegraph ?? {};
+  if (codegraphConfig.enabled === false) {
+    return runUnavailableMcp(CODEGRAPH_DISABLED_HINT, options);
+  }
+  const excludedRoots = codegraphConfig.excluded_roots;
+  const exclusion = shouldExcludeCodegraphProject(projectCwd, {
+    homeDir,
+    ...excludedRoots === undefined ? {} : { excludedRoots }
+  });
+  if (exclusion.excluded) {
+    return runUnavailableMcp(CODEGRAPH_EXCLUDED_HINT, options);
+  }
+  const trustedInstallDir = config.trustedCodegraphInstallDir;
+  const resolutionOptions = {
+    env,
+    homeDir,
+    provisioned: () => provisionedBinFromInstallDir(trustedInstallDir)
+  };
+  let resolution = options.resolve?.(resolutionOptions) ?? resolveCodegraphCommand(resolutionOptions);
+  const nodeSupport = evaluateCodegraphNodeSupport({ env, nodeVersion: options.nodeVersion });
+  if (!resolution.exists || shouldSkipResolvedCommand(resolution, options.commandExists ?? existsSync5)) {
+    if (resolution.source === "path" && !nodeSupport.supported) {
+      return runUnavailableMcp(buildCodegraphNodeSkipHint(nodeSupport), options);
+    }
+    const provisioned = await provisionMissingCodegraph({
+      config: codegraphConfig,
+      ensureProvisioned: options.ensureProvisioned ?? ensureCodegraphProvisioned,
+      homeDir,
+      resolution,
+      ...trustedInstallDir === undefined ? {} : { trustedInstallDir }
+    });
+    if (provisioned === null) {
+      return runUnavailableMcp(CODEGRAPH_SKIP_HINT, options);
+    }
+    resolution = provisioned;
+  }
+  if (codegraphCommandRequiresSupportedLocalNode(resolution) && !nodeSupport.supported) {
+    return runUnavailableMcp(buildCodegraphNodeSkipHint(nodeSupport), options);
+  }
+  const runProcess = options.runProcess ?? runBridgedCodegraphProcess;
+  const codegraphEnv = codegraphEnvForConfig(trustedInstallDir, homeDir, codegraphConfig.daemon === true, options.buildEnv);
+  const mergedEnv = buildCodegraphChildEnv({ ambientEnv: env, codegraphEnv, runtimeEnv: env });
+  return runProcess(resolution.command, [...resolution.argsPrefix, "serve", "--mcp"], {
+    cwd: projectCwd,
+    env: mergedEnv,
+    input: options.stdin ?? processStdin,
+    output: options.stdout ?? processStdout,
+    stderr: options.stderr ?? processStderr,
+    stdio: "pipe",
+    parentWatchdog: options.parentWatchdog ?? {}
+  });
+}
+async function runUnavailableMcp(reason, options) {
+  (options.stderr ?? processStderr).write(reason);
+  await runUnavailableCodegraphMcpServer({
+    input: options.stdin ?? processStdin,
+    output: options.stdout ?? processStdout,
+    reason,
+    serverVersion: CODEGRAPH_VERSION,
+    parentWatchdog: options.parentWatchdog ?? {}
+  });
+  return 0;
+}
+async function provisionMissingCodegraph(options) {
+  if (options.resolution.source === "env")
+    return null;
+  if (options.config.auto_provision === false)
+    return null;
+  const installDir = options.trustedInstallDir ?? join7(options.homeDir, ".omo", "codegraph");
+  const result = await options.ensureProvisioned({
+    installDir,
+    lockDir: join7(installDir, ".locks"),
+    version: CODEGRAPH_VERSION
+  });
+  if (!result.provisioned || result.binPath === undefined)
+    return null;
+  return { argsPrefix: [], command: result.binPath, exists: true, source: "provisioned" };
+}
+function shouldSkipResolvedCommand(resolution, commandExists) {
+  if (resolution.source !== "env")
+    return false;
+  if (!looksLikePath2(resolution.command))
+    return false;
+  return !commandExists(resolution.command);
+}
+function looksLikePath2(command) {
+  return command.includes("/") || command.includes("\\");
+}
+function codegraphEnvForConfig(trustedInstallDir, homeDir, daemon, buildEnv) {
+  const env = buildEnv?.({ daemon, homeDir }) ?? buildCodegraphEnv({ daemon, homeDir });
+  return trustedInstallDir === undefined ? env : { ...env, CODEGRAPH_INSTALL_DIR: trustedInstallDir };
+}
+function resolveProjectCwd(env, fallback) {
+  for (const key of PROJECT_CWD_ENV_KEYS) {
+    const candidate = env[key]?.trim();
+    if (candidate === undefined || candidate.length === 0)
+      continue;
+    const resolved = resolve3(candidate);
+    if (existsSync5(resolved))
+      return resolved;
+  }
+  return resolve3(fallback);
+}
+function provisionedBinFromInstallDir(installDir) {
+  if (installDir === undefined)
+    return null;
+  const candidate = join7(installDir, "bin", process.platform === "win32" ? "codegraph.cmd" : "codegraph");
+  return existsSync5(candidate) ? candidate : null;
+}
+async function runCodegraphServeCli() {
+  process.exitCode = await runCodegraphServe();
+}
+if (isDirectInvocation(process.argv[1])) {
+  runCodegraphServeCli().catch((error) => {
+    processStderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}
+`);
+    process.exitCode = 1;
+  });
+}
+function isDirectInvocation(argvPath) {
+  if (argvPath === undefined)
+    return false;
+  const modulePath = fileURLToPath(import.meta.url);
+  const moduleName = basename3(modulePath);
+  if (moduleName !== "serve.js" && moduleName !== "serve.ts")
+    return false;
+  return realpathSync2(resolve3(argvPath)) === realpathSync2(modulePath);
+}
+export {
+  runCodegraphServeCli,
+  runCodegraphServe,
+  resolveServeProcessInvocation
+};
