@@ -67,7 +67,7 @@ describe("createBuiltinMcps", () => {
     // given
     mockLocalMcps()
     const { createBuiltinMcps } = require("../index") as typeof import("../index")
-    const disabledMcps = ["websearch", "context7", "grep_app", "lsp", "codegraph"]
+    const disabledMcps = ["websearch", "context7", "grep_app", "lsp", "codegraph", "astrolabe"]
 
     // when
     const result = createBuiltinMcps(disabledMcps)
