@@ -187,6 +187,5 @@ export function createChatParamsHandler(_args: {
         delete output.options.thinking
       }
     }
-    }
   }
 }

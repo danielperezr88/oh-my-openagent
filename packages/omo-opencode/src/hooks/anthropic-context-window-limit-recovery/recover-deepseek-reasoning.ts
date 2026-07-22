@@ -1,8 +1,12 @@
 import type { createOpencodeClient } from "@opencode-ai/sdk"
 import { log } from "../../shared/logger"
-import type { MessageData } from "./types"
 
 type Client = ReturnType<typeof createOpencodeClient>
+
+type RecoveryMessageData = {
+  info?: { id?: string; role?: string }
+  parts?: Array<{ type: string; text?: string }>
+}
 
 /**
  * Recovery for DeepSeek's "reasoning_content must be passed back" error.
@@ -18,8 +22,8 @@ type Client = ReturnType<typeof createOpencodeClient>
 export async function recoverDeepSeekReasoningContent(
   client: Client,
   sessionID: string,
-  _failedAssistantMsg: MessageData,
-  allMessages?: MessageData[],
+  _failedAssistantMsg: RecoveryMessageData,
+  allMessages?: RecoveryMessageData[],
 ): Promise<boolean> {
   if (!allMessages || allMessages.length === 0) {
     log("[session-recovery] recoverDeepSeekReasoningContent: no messages to scan", { sessionID })
@@ -36,11 +40,11 @@ export async function recoverDeepSeekReasoningContent(
 
     const parts = msg.parts ?? []
     const hasTool = parts.some(
-      (p) => p.type === "tool" || p.type === "tool_use",
+      (p: { type: string }) => p.type === "tool" || p.type === "tool_use",
     )
     if (!hasTool) continue
 
-    const hasReasoning = parts.some((p) => p.type === "reasoning")
+    const hasReasoning = parts.some((p: { type: string }) => p.type === "reasoning")
     if (!hasReasoning) {
       rootCauseID = msg.info?.id
       break

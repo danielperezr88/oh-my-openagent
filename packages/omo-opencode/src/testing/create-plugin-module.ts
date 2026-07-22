@@ -303,7 +303,7 @@ export function createPluginModule(overrides: Partial<PluginModuleDeps> = {}): P
       "experimental.session.compacting": createSessionCompactingHandler({
         ...hooks,
         transcriptArchival,
-        pluginContext: input,
+        pluginContext: input as unknown as { directory: string; client: { session: { messages: (args: { path: { id: string } }) => Promise<unknown[]> } } },
       }),
 
       "experimental.compaction.autocontinue": createCompactionAutocontinueHandler(hooks),

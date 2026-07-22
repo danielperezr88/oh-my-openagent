@@ -36,6 +36,9 @@ type MessagesTransformHooks = {
   toolPairValidator?: CreatedHooks["toolPairValidator"]
   monitorStatusInjector?: CreatedHooks["monitorStatusInjector"]
   categorySkillReminder?: CreatedHooks["categorySkillReminder"]
+  mcpDeferredLoader?: CreatedHooks["mcpDeferredLoader"]
+  contextMonitor?: CreatedHooks["contextMonitor"]
+  continuousLearningInject?: CreatedHooks["continuousLearningInject"]
 }
 type MessagesTransformHookKey = keyof MessagesTransformHooks
 type MessagesTransformHookEntry = {
