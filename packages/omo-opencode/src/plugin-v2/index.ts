@@ -1,0 +1,6 @@
+export { createV2PluginDefinition, type V2PluginOptions } from "./plugin-definition"
+export { buildRulesSystemBlock, registerRulesInjection } from "./rules-injection"
+export { registerObservationRecorder } from "./observation-recorder"
+export { registerInstinctInjection, formatInstinctsForSystem, extractLastUserText } from "./instinct-injection"
+export { registerInstinctTools } from "./instinct-tools"
+export { resolveProjectHashForDirectory } from "./project-hash"

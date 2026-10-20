@@ -9,14 +9,14 @@ import { applyDecay } from "./confidence"
 const OMO_DIR = process.env.OMO_DIR ?? join(homedir(), ".omo")
 const INSTINCTS_BASE = join(OMO_DIR, "instincts")
 
-function getScopeDir(scope: "project" | "global", subdir: string): string {
+function getScopeDir(scope: "project" | "global", subdir: string, projectHash?: string): string {
   if (scope === "global") return join(INSTINCTS_BASE, "global", subdir)
-  const hash = resolveProjectHash()
+  const hash = projectHash ?? resolveProjectHash()
   return join(INSTINCTS_BASE, hash, subdir)
 }
 
-export function listInstincts(scope: "project" | "global" = "project"): Instinct[] {
-  const dir = getScopeDir(scope, "personal")
+export function listInstincts(scope: "project" | "global" = "project", projectHash?: string): Instinct[] {
+  const dir = getScopeDir(scope, "personal", projectHash)
   if (!existsSync(dir)) return []
 
   const instincts: Instinct[] = []
@@ -33,19 +33,19 @@ export function listInstincts(scope: "project" | "global" = "project"): Instinct
   return instincts
 }
 
-export function listAllInstincts(): Instinct[] {
-  return [...listInstincts("project"), ...listInstincts("global")]
+export function listAllInstincts(projectHash?: string): Instinct[] {
+  return [...listInstincts("project", projectHash), ...listInstincts("global")]
 }
 
-export function saveInstinct(instinct: Instinct): void {
-  const dir = getScopeDir(instinct.scope, "personal")
+export function saveInstinct(instinct: Instinct, projectHash?: string): void {
+  const dir = getScopeDir(instinct.scope, "personal", projectHash)
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   const path = join(dir, `${instinct.id}.yaml`)
   writeFileSync(path, serializeInstinct(instinct), "utf-8")
 }
 
-export function deleteInstinct(id: string, scope: "project" | "global" = "project"): boolean {
-  const dir = getScopeDir(scope, "personal")
+export function deleteInstinct(id: string, scope: "project" | "global" = "project", projectHash?: string): boolean {
+  const dir = getScopeDir(scope, "personal", projectHash)
   for (const ext of [".yaml", ".md"]) {
     const path = join(dir, `${id}${ext}`)
     if (existsSync(path)) {
