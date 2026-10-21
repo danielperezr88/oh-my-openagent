@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin"
 import { existsSync } from "fs"
 import { log } from "../shared/logger"
+import { registerInstinctConsolidation } from "./instinct-consolidation"
 import { registerInstinctInjection } from "./instinct-injection"
 import { registerInstinctTools } from "./instinct-tools"
 import { registerObservationRecorder } from "./observation-recorder"
@@ -23,6 +24,13 @@ export interface V2PluginOptions {
       readonly enabled?: boolean
       readonly maxInstinctsPerMessage?: number
       readonly minConfidence?: number
+    }
+    readonly consolidation?: {
+      readonly enabled?: boolean
+      readonly minObservations?: number
+      readonly minIntervalMs?: number
+      readonly maxAnalysisLines?: number
+      readonly llm_model?: { readonly providerID: string; readonly id: string }
     }
   }
   readonly knowledge?: { readonly enabled?: boolean }
@@ -67,6 +75,15 @@ export function createV2PluginDefinition(): Plugin.Plugin {
       if (learningEnabled) {
         registerInstinctTools(ctx, projectHash)
       }
+      let consolidationCleanup: (() => void) | null = null
+      if (learningEnabled && learning.consolidation?.enabled !== false) {
+        consolidationCleanup = registerInstinctConsolidation(ctx, projectHash, {
+          minObservations: learning.consolidation?.minObservations,
+          minIntervalMs: learning.consolidation?.minIntervalMs,
+          maxAnalysisLines: learning.consolidation?.maxAnalysisLines,
+          llmModel: learning.consolidation?.llm_model,
+        })
+      }
 
       if (options.knowledge?.enabled !== false) {
         registerKnowledgeTool(ctx)
@@ -109,6 +126,7 @@ export function createV2PluginDefinition(): Plugin.Plugin {
 
       return () => {
         telemetryCleanup?.()
+        consolidationCleanup?.()
       }
     },
   })

@@ -3,6 +3,14 @@ export { buildRulesSystemBlock, registerRulesInjection } from "./rules-injection
 export { registerObservationRecorder } from "./observation-recorder"
 export { registerInstinctInjection, formatInstinctsForSystem, extractLastUserText } from "./instinct-injection"
 export { registerInstinctTools } from "./instinct-tools"
+export { registerInstinctConsolidation, extractInstinctBlocks, type InstinctConsolidationOptions, type LlmModelRef } from "./instinct-consolidation"
+export {
+  buildStatisticalInstincts,
+  confidenceFromCount,
+  makeInstinct,
+  shouldRunConsolidation,
+  type StatisticalAnalysis,
+} from "./statistical-instincts"
 export { resolveProjectHashForDirectory } from "./project-hash"
 export { registerKnowledgeTool } from "./knowledge-tool"
 export { registerDocStoreTools } from "./doc-store-tools"
