@@ -11,6 +11,7 @@ import { registerDocStoreTools } from "./doc-store-tools"
 import { DEFAULT_DOC_STORE_CLI } from "./doc-store-cli"
 import { registerFactForceGate } from "./fact-force-gate"
 import { registerEditWarnings } from "./edit-warnings"
+import { registerDiscoverToolsTool } from "./discover-tools"
 import { registerTelemetryBridge } from "./telemetry-bridge"
 
 export interface V2PluginOptions {
@@ -26,6 +27,7 @@ export interface V2PluginOptions {
   }
   readonly knowledge?: { readonly enabled?: boolean }
   readonly doc_store?: { readonly enabled?: boolean; readonly cli_path?: string }
+  readonly discover_tools?: { readonly enabled?: boolean; readonly topK?: number; readonly threshold?: number }
   readonly quality?: {
     readonly enabled?: boolean
     readonly fact_force_gate?: { readonly enabled?: boolean }
@@ -81,6 +83,13 @@ export function createV2PluginDefinition(): Plugin.Plugin {
       }
       if (quality.enabled !== false && quality.edit_warnings?.enabled !== false) {
         registerEditWarnings(ctx)
+      }
+
+      if (options.discover_tools?.enabled !== false) {
+        registerDiscoverToolsTool(ctx, {
+          topK: options.discover_tools?.topK,
+          threshold: options.discover_tools?.threshold,
+        })
       }
 
       const telemetryWanted =

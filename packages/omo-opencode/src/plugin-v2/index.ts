@@ -9,4 +9,13 @@ export { registerDocStoreTools } from "./doc-store-tools"
 export { runDocStore, DEFAULT_DOC_STORE_CLI } from "./doc-store-cli"
 export { registerFactForceGate, createReadTracker, extractFilePath } from "./fact-force-gate"
 export { registerEditWarnings, configEditWarning, diagnosticsReminder } from "./edit-warnings"
+export { registerDiscoverToolsTool } from "./discover-tools"
+export {
+  buildCatalog,
+  callExpression,
+  embeddingText,
+  formatDiscoverResults,
+  keywordFallback,
+  type CatalogTool,
+} from "./discover-catalog"
 export { registerTelemetryBridge } from "./telemetry-bridge"
