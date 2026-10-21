@@ -16,9 +16,11 @@ function spawnDocStore(cliPath: string, args: string[], input: string | null, se
       env.OPENAGENT_SESSION_ID = sessionID
     }
 
+    // No shell: on Windows cmd.exe concatenates args without quoting, so any
+    // space-bearing argument (queries, file paths) splits into multiple argv
+    // entries. bun resolves as a real executable, so a direct spawn is safe.
     const proc = spawn("bun", ["run", cliPath, "--json", ...args], {
       stdio: input === null ? ["ignore", "pipe", "pipe"] : ["pipe", "pipe", "pipe"],
-      shell: true,
       env,
     })
 
