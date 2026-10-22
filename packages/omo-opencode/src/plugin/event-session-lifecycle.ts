@@ -91,6 +91,7 @@ export async function handleSessionDeletedEvent(args: {
   managers: Managers;
   firstMessageVariantGate: FirstMessageVariantGate;
   clearModelFallbackSession: (sessionID: string) => void;
+  clearUserAbortRecovery: (sessionID: string) => void;
 }): Promise<void> {
   const sessionID = resolveSessionEventID(args.props);
   if (sessionID === getMainSessionID()) setMainSession(undefined);
@@ -100,6 +101,7 @@ export async function handleSessionDeletedEvent(args: {
   const wasSyncSubagentSession = syncSubagentSessions.has(sessionID);
   clearSessionAgent(sessionID);
   args.clearModelFallbackSession(sessionID);
+  args.clearUserAbortRecovery(sessionID);
   resetMessageCursor(sessionID);
   clearBackgroundOutputConsumptionsForParentSession(sessionID);
   clearBackgroundOutputConsumptionsForTaskSession(sessionID);
@@ -123,6 +125,8 @@ export function handleMessageRemovedEvent(props?: Record<string, unknown>): void
 export function handleMessageUpdatedSessionState(args: {
   props?: Record<string, unknown>;
   noteSessionModel: (sessionID: string, model: { providerID: string; modelID: string }) => void;
+  clearUserAbortRecovery: (sessionID: string) => void;
+  noteAssistantError: (sessionID: string, error: unknown) => void;
 }): {
   info: Record<string, unknown> | undefined;
   sessionID: string | undefined;
@@ -145,6 +149,10 @@ export function handleMessageUpdatedSessionState(args: {
       args.noteSessionModel(sessionID, { providerID, modelID });
       setSessionModel(sessionID, { providerID, modelID });
     }
+    args.clearUserAbortRecovery(sessionID);
+  }
+  if (sessionID && role === "assistant") {
+    args.noteAssistantError(sessionID, info?.error);
   }
 
   return { info, sessionID, agent, role };

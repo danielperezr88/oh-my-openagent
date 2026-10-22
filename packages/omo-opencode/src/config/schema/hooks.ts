@@ -2,6 +2,7 @@ import { z } from "zod"
 
 export const HookNameSchema = z.enum([
   "todo-continuation-enforcer",
+  "session-recovery",
   "session-notification",
   "comment-checker",
   "tool-output-truncator",
