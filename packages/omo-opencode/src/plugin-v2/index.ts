@@ -29,6 +29,23 @@ export {
   stripMediaPartsFromMessages,
 } from "./session-recovery-strip"
 export {
+  buildSyntheticToolResultPart,
+  CANCELLED_TOOL_RESULT_TEXT,
+  injectMissingToolResults,
+  isToolCallRequestPart,
+  isToolResultRequestPart,
+  summarizeToolPairs,
+  UNAVAILABLE_TOOL_RESULT_TEXT,
+  type ToolCallInfo,
+} from "./session-recovery-tool-results"
+export {
+  emptyArmedRecovery,
+  mergeArmedRecovery,
+  resolveRecoveryAction,
+  type ArmedRecovery,
+  type RecoveryAction,
+} from "./session-recovery-strategies"
+export {
   buildCatalog,
   callExpression,
   embeddingText,

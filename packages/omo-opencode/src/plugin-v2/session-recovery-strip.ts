@@ -8,7 +8,7 @@ type RequestPartLike = {
   mimeType?: unknown
 }
 
-type RequestMessageLike = {
+export type RequestMessageLike = {
   id?: unknown
   content?: unknown
   parts?: unknown
@@ -48,7 +48,7 @@ function buildPlaceholderText(messageID: string, image: boolean): string {
   return `[media attachment removed: media content is not supported by the current model. It was attached in message ${messageID}. Continue with text only.]`
 }
 
-function resolveRequestSegments(message: RequestMessageLike): unknown[] | null {
+export function resolveRequestSegments(message: RequestMessageLike): unknown[] | null {
   if (Array.isArray(message.parts)) return message.parts
   if (Array.isArray(message.content)) return message.content
   return null

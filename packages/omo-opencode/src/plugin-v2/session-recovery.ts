@@ -1,8 +1,16 @@
 import type { Plugin } from "@opencode/plugin"
 import { log } from "../shared/logger"
 import { isRecord } from "../shared/record-type-guard"
-import { detectErrorType } from "../hooks/session-recovery/detect-error-type"
+import { detectErrorType, extractUnavailableToolName } from "../hooks/session-recovery/detect-error-type"
 import { stripMediaPartsFromMessages } from "./session-recovery-strip"
+import { injectMissingToolResults, summarizeToolPairs } from "./session-recovery-tool-results"
+import { formatMessageInventory } from "./session-recovery-diagnostics"
+import {
+  emptyArmedRecovery,
+  mergeArmedRecovery,
+  resolveRecoveryAction,
+  type ArmedRecovery,
+} from "./session-recovery-strategies"
 
 export interface SessionRecoveryOptions {
   readonly autoResume: boolean
@@ -15,22 +23,10 @@ export interface FailedSessionEvent {
 
 type EventSubscribe = (options?: { signal?: AbortSignal }) => AsyncIterable<unknown>
 
-type RequestPartLike = {
-  type?: unknown
-  mime?: unknown
-  mediaType?: unknown
-  mimeType?: unknown
-}
-
-type StripHookEvent = {
+type RequestHookEvent = {
   sessionID?: unknown
   messages?: unknown
 }
-
-const RESUME_TEXT =
-  "[session recovery] The previous request failed because the active model only accepts text content. " +
-  "Image attachments in the conversation history are now replaced with text placeholders in outgoing requests. " +
-  "Continue the user's task from where it stopped, using text content only."
 
 export function extractFailedSessionEvent(event: unknown): FailedSessionEvent | null {
   if (!isRecord(event)) return null
@@ -47,86 +43,22 @@ function resolveEventSubscribe(domain: unknown): EventSubscribe | null {
   return (domain.subscribe as EventSubscribe).bind(domain)
 }
 
-function formatPartKind(part: unknown): string {
-  if (typeof part !== "object" || part === null) return typeof part
-  const candidate = part as RequestPartLike
-  const mimeType =
-    typeof candidate.mime === "string"
-      ? candidate.mime
-      : typeof candidate.mediaType === "string"
-        ? candidate.mediaType
-        : typeof candidate.mimeType === "string"
-          ? candidate.mimeType
-          : ""
-  const type = String(candidate.type ?? "?")
-  return mimeType.length > 0 ? `${type}(${mimeType})` : type
+interface RecoveryState {
+  readonly recoveringSessions: Map<string, ArmedRecovery>
+  readonly handledErrorKeys: Set<string>
+  readonly signal: AbortSignal
 }
 
-function formatMessageInventory(messages: ReadonlyArray<unknown>): string {
-  const descriptions: string[] = []
-  for (const message of messages) {
-    if (typeof message !== "object" || message === null) {
-      descriptions.push(typeof message)
-    } else {
-      const candidate = message as { role?: unknown; parts?: unknown; content?: unknown }
-      const segments = Array.isArray(candidate.parts)
-        ? candidate.parts
-        : Array.isArray(candidate.content)
-          ? candidate.content
-          : null
-      const role = String(candidate.role ?? "?")
-      if (segments === null) {
-        descriptions.push(`${role}:content=${typeof candidate.content}`)
-      } else {
-        const kinds = segments.slice(0, 10).map((part) => formatPartKind(part)).join(",")
-        const overflow = segments.length > 10 ? `,+${segments.length - 10}more` : ""
-        descriptions.push(`${role}[${kinds}${overflow}]`)
-      }
-    }
-    if (descriptions.length >= 8) break
-  }
-  return descriptions.join(" ")
-}
-
-function previewValue(value: unknown): string {
-  if (typeof value === "string") return value.slice(0, 50)
-  try {
-    const encoded = JSON.stringify(value)
-    return typeof encoded === "string" ? encoded.slice(0, 50) : typeof value
-  } catch {
-    return typeof value
-  }
-}
-
-function formatFirstNonTextPart(messages: ReadonlyArray<unknown>): string {
-  for (const message of messages) {
-    if (typeof message !== "object" || message === null) continue
-    const candidate = message as { parts?: unknown; content?: unknown }
-    const segments = Array.isArray(candidate.parts)
-      ? candidate.parts
-      : Array.isArray(candidate.content)
-        ? candidate.content
-        : null
-    if (segments === null) continue
-    for (const part of segments) {
-      if (typeof part !== "object" || part === null) continue
-      if ((part as RequestPartLike).type === "text") continue
-      return Object.entries(part as Record<string, unknown>)
-        .map(([key, value]) => `${key}=${previewValue(value)}`)
-        .join(" ")
-    }
-  }
-  return "none"
-}
-
-function createStripHandler(recoveringSessions: Set<string>): (event: unknown) => void {
+function createRequestTransformHandler(recoveringSessions: Map<string, ArmedRecovery>): (event: unknown) => void {
   const diagnosedSessions = new Set<string>()
   return (event) => {
     try {
       if (typeof event !== "object" || event === null) return
-      const candidate = event as StripHookEvent
+      const candidate = event as RequestHookEvent
       const sessionID = candidate.sessionID
       if (typeof sessionID !== "string" || !recoveringSessions.has(sessionID)) return
+      const armed = recoveringSessions.get(sessionID)
+      if (!armed) return
       const messages = candidate.messages
       if (!Array.isArray(messages)) {
         if (!diagnosedSessions.has(sessionID)) {
@@ -135,29 +67,35 @@ function createStripHandler(recoveringSessions: Set<string>): (event: unknown) =
         }
         return
       }
-      const stripped = stripMediaPartsFromMessages(messages)
-      if (stripped > 0) {
-        log(
-          `[plugin-v2/session-recovery] replaced ${stripped} media part(s) with placeholders in outgoing request for session ${sessionID}`,
-        )
-        return
+      let transformed = false
+      if (armed.stripMedia) {
+        const stripped = stripMediaPartsFromMessages(messages)
+        if (stripped > 0) {
+          transformed = true
+          log(
+            `[plugin-v2/session-recovery] replaced ${stripped} media part(s) with placeholders in outgoing request for session ${sessionID}`,
+          )
+        }
       }
-      if (!diagnosedSessions.has(sessionID)) {
-        diagnosedSessions.add(sessionID)
-        log(
-          `[plugin-v2/session-recovery] no media parts matched for session ${sessionID}; request inventory: ${formatMessageInventory(messages)}; firstNonTextPart: ${formatFirstNonTextPart(messages)}`,
-        )
+      if (armed.toolResultText !== null) {
+        const injected = injectMissingToolResults(messages, armed.toolResultText)
+        if (injected > 0) {
+          transformed = true
+          log(
+            `[plugin-v2/session-recovery] injected ${injected} synthetic tool result(s) into outgoing request for session ${sessionID}`,
+          )
+        }
       }
+      if (transformed || diagnosedSessions.has(sessionID)) return
+      diagnosedSessions.add(sessionID)
+      log(
+        `[plugin-v2/session-recovery] no recoverable parts matched for session ${sessionID}; ` +
+          `inventory: ${formatMessageInventory(messages)}; toolPairs: ${summarizeToolPairs(messages)}`,
+      )
     } catch (error) {
-      log(`[plugin-v2/session-recovery] strip hook failed: ${String(error)}`)
+      log(`[plugin-v2/session-recovery] request transform hook failed: ${String(error)}`)
     }
   }
-}
-
-interface RecoveryState {
-  readonly recoveringSessions: Set<string>
-  readonly handledErrorKeys: Set<string>
-  readonly signal: AbortSignal
 }
 
 async function handleBusEvent(
@@ -174,14 +112,20 @@ async function handleBusEvent(
   if (state.handledErrorKeys.has(errorKey)) return
   state.handledErrorKeys.add(errorKey)
 
-  if (errorType !== "image_content_invalid") {
+  const action = resolveRecoveryAction(errorType)
+  if (action === null) {
     log(`[plugin-v2/session-recovery] detected ${errorType} for session ${failed.sessionID}; no V2 strategy for this error yet`)
     return
   }
 
-  state.recoveringSessions.add(failed.sessionID)
+  const current = state.recoveringSessions.get(failed.sessionID) ?? emptyArmedRecovery()
+  state.recoveringSessions.set(failed.sessionID, mergeArmedRecovery(current, action.armPatch))
+
+  const unavailableToolName = errorType === "unavailable_tool" ? extractUnavailableToolName(failed.error) : null
   log(
-    `[plugin-v2/session-recovery] image-content failure detected for session ${failed.sessionID}; outgoing requests will replace image parts with placeholders`,
+    `[plugin-v2/session-recovery] ${errorType} failure detected for session ${failed.sessionID}` +
+      `${unavailableToolName ? ` (unavailable tool '${unavailableToolName}')` : ""}; ` +
+      `outgoing requests will apply ${errorType} recovery transforms`,
   )
 
   if (!options.autoResume) {
@@ -190,8 +134,8 @@ async function handleBusEvent(
   }
 
   try {
-    await ctx.session.synthetic({ sessionID: failed.sessionID, text: RESUME_TEXT })
-    log(`[plugin-v2/session-recovery] resumed session ${failed.sessionID} after image-content recovery`)
+    await ctx.session.synthetic({ sessionID: failed.sessionID, text: action.resumeText })
+    log(`[plugin-v2/session-recovery] resumed session ${failed.sessionID} after ${errorType} recovery`)
   } catch (error) {
     log(`[plugin-v2/session-recovery] failed to resume session ${failed.sessionID}: ${String(error)}`)
   }
@@ -222,19 +166,19 @@ async function runRecoveryEventLoop(
 export function registerSessionRecovery(ctx: Plugin.Context, options: SessionRecoveryOptions): () => void {
   const controller = new AbortController()
   const state: RecoveryState = {
-    recoveringSessions: new Set<string>(),
-    handledErrorKeys: new Set<string>(),
+    recoveringSessions: new Map(),
+    handledErrorKeys: new Set(),
     signal: controller.signal,
   }
-  const stripHandler = createStripHandler(state.recoveringSessions)
+  const requestTransformHandler = createRequestTransformHandler(state.recoveringSessions)
 
-  const stripHookRegistrations: ReadonlyArray<unknown> = [
-    ctx.session.hook("context", stripHandler),
-    ctx.session.hook("compaction", stripHandler),
-    ctx.session.hook("generate", stripHandler),
-    ctx.session.hook("title", stripHandler),
+  const requestHookRegistrations: ReadonlyArray<unknown> = [
+    ctx.session.hook("context", requestTransformHandler),
+    ctx.session.hook("compaction", requestTransformHandler),
+    ctx.session.hook("generate", requestTransformHandler),
+    ctx.session.hook("title", requestTransformHandler),
   ]
-  for (const registration of stripHookRegistrations) {
+  for (const registration of requestHookRegistrations) {
     Promise.resolve(registration).catch((error: unknown) => {
       log(`[plugin-v2/session-recovery] session hook registration rejected: ${String(error)}`)
     })
