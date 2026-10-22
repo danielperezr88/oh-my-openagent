@@ -22,6 +22,18 @@ const THINKING_DISABLED_ERROR = {
   message: "thinking is disabled and cannot contain blocks",
 }
 
+const TOOL_RESULT_MISSING_ERROR = {
+  type: "provider.invalid-request",
+  message: "messages.1: tool_use ids were found without tool_result blocks immediately after: toolu_123",
+  status: 400,
+}
+
+const UNAVAILABLE_TOOL_ERROR = {
+  type: "provider.invalid-request",
+  message: "Model tried to call unavailable tool 'invalid'. Available tools: bash, read, glob, grep, webfetch.",
+  status: 400,
+}
+
 function createEventQueue() {
   const events: unknown[] = []
   let wake: (() => void) | undefined
@@ -80,6 +92,23 @@ async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void
 
 async function settle(ms = 200): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function buildToolProbeRequest(sessionID: string) {
+  return {
+    sessionID,
+    messages: [
+      { role: "user", content: [{ type: "text", text: "run the check" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "calling" },
+          { type: "tool-call", id: "call_1", name: "bash", input: { command: "echo hi" } },
+        ],
+      },
+      { role: "user", content: [{ type: "text", text: "continue" }] },
+    ],
+  }
 }
 
 describe("extractFailedSessionEvent", () => {
@@ -194,7 +223,7 @@ describe("registerSessionRecovery", () => {
   })
 
   describe("#given a recoverable error with no V2 strategy", () => {
-    test("#then no synthetic is dispatched and stripping stays unarmed", async () => {
+    test("#then no synthetic is dispatched and neither strip nor tool injection arms", async () => {
       // given
       const queue = createEventQueue()
       const { ctx, hookHandlers, syntheticCalls } = createFakeCtx(queue.stream)
@@ -208,13 +237,166 @@ describe("registerSessionRecovery", () => {
       await settle()
       const probe = {
         sessionID: "ses_think",
-        messages: [{ role: "user", parts: [{ type: "file", mime: "image/png" }] }],
+        messages: [
+          { role: "user", parts: [{ type: "file", mime: "image/png" }] },
+          {
+            role: "assistant",
+            content: [{ type: "tool-call", id: "call_1", name: "bash", input: {} }],
+          },
+        ],
       }
       hookHandlers.get("context")?.(probe)
 
       // then
       expect(syntheticCalls).toHaveLength(0)
       expect(probe.messages[0].parts[0].type).toBe("file")
+      expect(probe.messages).toHaveLength(2)
+
+      dispose()
+    })
+  })
+
+  describe("#given a v2 context whose bus reports the missing tool result failure twice", () => {
+    test("#then one synthetic resume is dispatched and cancelled tool results are injected", async () => {
+      // given
+      const queue = createEventQueue()
+      const { ctx, hookHandlers, syntheticCalls } = createFakeCtx(queue.stream)
+
+      // when
+      const dispose = registerSessionRecovery(ctx, { autoResume: true })
+      queue.push({
+        type: "session.step.failed",
+        data: { sessionID: "ses_trm", assistantMessageID: "msg_1", error: TOOL_RESULT_MISSING_ERROR },
+      })
+      queue.push({
+        type: "session.execution.failed",
+        data: { sessionID: "ses_trm", error: TOOL_RESULT_MISSING_ERROR },
+      })
+      await waitFor(() => syntheticCalls.length === 1)
+      await settle()
+
+      const request = buildToolProbeRequest("ses_trm")
+      hookHandlers.get("context")?.(request)
+      const untouched = buildToolProbeRequest("ses_other")
+      hookHandlers.get("context")?.(untouched)
+
+      // then
+      expect(syntheticCalls).toHaveLength(1)
+      expect(syntheticCalls[0].sessionID).toBe("ses_trm")
+      expect(syntheticCalls[0].text).toContain("no matching tool result")
+      expect(request.messages).toHaveLength(4)
+      expect(request.messages[2].role).toBe("tool")
+      const resultPart = (request.messages[2] as { content: Record<string, unknown>[] }).content[0]
+      expect(resultPart.type).toBe("tool-result")
+      expect(resultPart.id).toBe("call_1")
+      expect(resultPart.name).toBe("bash")
+      expect(resultPart.result).toEqual({ type: "error", value: "Operation cancelled by user (ESC pressed)" })
+      expect(untouched.messages).toHaveLength(3)
+
+      dispose()
+    })
+  })
+
+  describe("#given a v2 context whose bus reports the unavailable tool failure twice", () => {
+    test("#then one synthetic resume is dispatched and unavailable tool results are injected", async () => {
+      // given
+      const queue = createEventQueue()
+      const { ctx, hookHandlers, syntheticCalls } = createFakeCtx(queue.stream)
+
+      // when
+      const dispose = registerSessionRecovery(ctx, { autoResume: true })
+      queue.push({
+        type: "session.step.failed",
+        data: { sessionID: "ses_utl", error: UNAVAILABLE_TOOL_ERROR },
+      })
+      queue.push({
+        type: "session.execution.failed",
+        data: { sessionID: "ses_utl", error: UNAVAILABLE_TOOL_ERROR },
+      })
+      await waitFor(() => syntheticCalls.length === 1)
+      await settle()
+
+      const request = buildToolProbeRequest("ses_utl")
+      hookHandlers.get("context")?.(request)
+
+      // then
+      expect(syntheticCalls).toHaveLength(1)
+      expect(syntheticCalls[0].sessionID).toBe("ses_utl")
+      expect(syntheticCalls[0].text).toContain("not available")
+      expect(request.messages).toHaveLength(4)
+      expect(request.messages[2].role).toBe("tool")
+      const resultPart = (request.messages[2] as { content: Record<string, unknown>[] }).content[0]
+      expect(resultPart.result).toEqual({
+        type: "error",
+        value: "Tool not available. Please continue without this tool.",
+      })
+
+      dispose()
+    })
+  })
+
+  describe("#given one session failing first with images then with missing tool results", () => {
+    test("#then both transforms arm and a single outgoing request gets both fixes", async () => {
+      // given
+      const queue = createEventQueue()
+      const { ctx, hookHandlers, syntheticCalls } = createFakeCtx(queue.stream)
+
+      // when
+      const dispose = registerSessionRecovery(ctx, { autoResume: true })
+      queue.push({
+        type: "session.execution.failed",
+        data: { sessionID: "ses_mix", error: ZAI_IMAGE_ERROR },
+      })
+      await waitFor(() => syntheticCalls.length === 1)
+      queue.push({
+        type: "session.execution.failed",
+        data: { sessionID: "ses_mix", error: TOOL_RESULT_MISSING_ERROR },
+      })
+      await waitFor(() => syntheticCalls.length === 2)
+      await settle()
+
+      const request = {
+        sessionID: "ses_mix",
+        messages: [
+          { role: "user", content: [{ type: "text", text: "describe" }, { type: "media", media: "data:image/png;base64,AAA" }] },
+          { role: "assistant", content: [{ type: "tool-call", id: "call_1", name: "bash", input: {} }] },
+        ],
+      }
+      hookHandlers.get("context")?.(request)
+
+      // then
+      expect(syntheticCalls).toHaveLength(2)
+      expect(syntheticCalls.map((call) => call.sessionID)).toEqual(["ses_mix", "ses_mix"])
+      const userContent = (request.messages[0] as { content: Record<string, unknown>[] }).content
+      expect(userContent[1].type).toBe("text")
+      expect(userContent[1].text).toContain("[image attachment removed")
+      expect(request.messages).toHaveLength(3)
+      expect(request.messages[2].role).toBe("tool")
+
+      dispose()
+    })
+  })
+
+  describe("#given auto resume disabled with a missing tool result failure", () => {
+    test("#then no synthetic is dispatched but tool result injection still arms", async () => {
+      // given
+      const queue = createEventQueue()
+      const { ctx, hookHandlers, syntheticCalls } = createFakeCtx(queue.stream)
+
+      // when
+      const dispose = registerSessionRecovery(ctx, { autoResume: false })
+      queue.push({
+        type: "session.execution.failed",
+        data: { sessionID: "ses_trm_off", error: TOOL_RESULT_MISSING_ERROR },
+      })
+      await settle()
+      const request = buildToolProbeRequest("ses_trm_off")
+      hookHandlers.get("context")?.(request)
+
+      // then
+      expect(syntheticCalls).toHaveLength(0)
+      expect(request.messages).toHaveLength(4)
+      expect(request.messages[2].role).toBe("tool")
 
       dispose()
     })
