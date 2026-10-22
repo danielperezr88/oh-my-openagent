@@ -566,7 +566,7 @@ describe("HookNameSchema", () => {
     expect(result.success).toBe(false)
   })
 
-  test("rejects removed session-recovery hook name", () => {
+  test("accepts restored session-recovery hook name", () => {
     //#given
     const input = "session-recovery"
 
@@ -574,7 +574,7 @@ describe("HookNameSchema", () => {
     const result = HookNameSchema.safeParse(input)
 
     //#then
-    expect(result.success).toBe(false)
+    expect(result.success).toBe(true)
   })
 })
 

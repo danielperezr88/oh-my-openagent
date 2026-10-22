@@ -3,6 +3,8 @@ import { DynamicContextPruningConfigSchema } from "./dynamic-context-pruning"
 
 export const ExperimentalConfigSchema = z.object({
   aggressive_truncation: z.boolean().optional(),
+  /** Auto-resume the session after a session-recovery history repair (thinking / image content cases) */
+  auto_resume: z.boolean().optional(),
   preemptive_compaction: z.boolean().optional(),
   truncate_all_tool_outputs: z.boolean().optional(),
   /** Dynamic context pruning configuration */

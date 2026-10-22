@@ -316,7 +316,7 @@ describe("migrateHookNames", () => {
     expect(removed).toEqual(["thinking-block-validator"])
   })
 
-  test("removes session-recovery from disabled hooks", () => {
+  test("keeps session-recovery in disabled hooks", () => {
     //#given
     const hooks = ["session-recovery", "comment-checker"]
 
@@ -324,9 +324,9 @@ describe("migrateHookNames", () => {
     const { migrated, changed, removed } = migrateHookNames(hooks)
 
     //#then
-    expect(changed).toBe(true)
-    expect(migrated).toEqual(["comment-checker"])
-    expect(removed).toEqual(["session-recovery"])
+    expect(changed).toBe(false)
+    expect(migrated).toEqual(["session-recovery", "comment-checker"])
+    expect(removed).toEqual([])
   })
 
   test("handles mixed migration and removal", () => {

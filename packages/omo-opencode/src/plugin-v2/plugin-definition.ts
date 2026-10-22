@@ -14,6 +14,7 @@ import { registerFactForceGate } from "./fact-force-gate"
 import { registerEditWarnings } from "./edit-warnings"
 import { registerDiscoverToolsTool } from "./discover-tools"
 import { registerTelemetryBridge } from "./telemetry-bridge"
+import { registerSessionRecovery } from "./session-recovery"
 
 export interface V2PluginOptions {
   readonly rules?: { readonly enabled?: boolean }
@@ -36,6 +37,10 @@ export interface V2PluginOptions {
   readonly knowledge?: { readonly enabled?: boolean }
   readonly doc_store?: { readonly enabled?: boolean; readonly cli_path?: string }
   readonly discover_tools?: { readonly enabled?: boolean; readonly topK?: number; readonly threshold?: number }
+  readonly session_recovery?: {
+    readonly enabled?: boolean
+    readonly auto_resume?: boolean
+  }
   readonly quality?: {
     readonly enabled?: boolean
     readonly fact_force_gate?: { readonly enabled?: boolean }
@@ -109,6 +114,13 @@ export function createV2PluginDefinition(): Plugin.Plugin {
         })
       }
 
+      let sessionRecoveryCleanup: (() => void) | null = null
+      if (options.session_recovery?.enabled !== false) {
+        sessionRecoveryCleanup = registerSessionRecovery(ctx, {
+          autoResume: options.session_recovery?.auto_resume !== false,
+        })
+      }
+
       const telemetryWanted =
         options.telemetry?.enabled === true ||
         options.telemetry?.endpoint !== undefined ||
@@ -127,6 +139,7 @@ export function createV2PluginDefinition(): Plugin.Plugin {
       return () => {
         telemetryCleanup?.()
         consolidationCleanup?.()
+        sessionRecoveryCleanup?.()
       }
     },
   })

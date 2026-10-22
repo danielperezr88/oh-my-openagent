@@ -82,6 +82,7 @@ export function createHooks(args: {
     isHookEnabled,
     safeHookEnabled,
     backgroundManager,
+    sessionRecovery: core.sessionRecovery ?? null,
   })
 
   const skill = createSkillHooks({

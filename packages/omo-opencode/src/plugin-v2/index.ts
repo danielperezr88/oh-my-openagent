@@ -19,6 +19,16 @@ export { registerFactForceGate, createReadTracker, extractFilePath } from "./fac
 export { registerEditWarnings, configEditWarning, diagnosticsReminder } from "./edit-warnings"
 export { registerDiscoverToolsTool } from "./discover-tools"
 export {
+  registerSessionRecovery,
+  extractFailedSessionEvent,
+  type SessionRecoveryOptions,
+} from "./session-recovery"
+export {
+  isImageRequestPart,
+  shouldStripRequestPart,
+  stripMediaPartsFromMessages,
+} from "./session-recovery-strip"
+export {
   buildCatalog,
   callExpression,
   embeddingText,
