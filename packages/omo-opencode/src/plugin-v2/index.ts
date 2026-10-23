@@ -17,6 +17,14 @@ export { registerDocStoreTools } from "./doc-store-tools"
 export { runDocStore, DEFAULT_DOC_STORE_CLI } from "./doc-store-cli"
 export { registerFactForceGate, createReadTracker, extractFilePath } from "./fact-force-gate"
 export { registerEditWarnings, configEditWarning, diagnosticsReminder } from "./edit-warnings"
+export {
+  createRepetitionTracker,
+  DEFAULT_REPETITION_GUARD_THRESHOLDS,
+  fingerprintToolInput,
+  registerRepetitionGuard,
+  resolveRepetitionThresholds,
+  type RepetitionGuardThresholds,
+} from "./repetition-guard"
 export { registerDiscoverToolsTool } from "./discover-tools"
 export {
   registerSessionRecovery,

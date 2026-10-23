@@ -15,6 +15,7 @@ import { registerEditWarnings } from "./edit-warnings"
 import { registerDiscoverToolsTool } from "./discover-tools"
 import { registerTelemetryBridge } from "./telemetry-bridge"
 import { registerSessionRecovery } from "./session-recovery"
+import { registerRepetitionGuard } from "./repetition-guard"
 
 export interface V2PluginOptions {
   readonly rules?: { readonly enabled?: boolean }
@@ -45,6 +46,12 @@ export interface V2PluginOptions {
     readonly enabled?: boolean
     readonly fact_force_gate?: { readonly enabled?: boolean }
     readonly edit_warnings?: { readonly enabled?: boolean }
+    readonly repetition_guard?: {
+      readonly enabled?: boolean
+      readonly min_calls?: number
+      readonly max_distinct_inputs?: number
+      readonly rapid_interval_ms?: number
+    }
   }
   readonly telemetry?: { readonly enabled?: boolean; readonly endpoint?: string; readonly project?: string }
 }
@@ -105,6 +112,14 @@ export function createV2PluginDefinition(): Plugin.Plugin {
       }
       if (quality.enabled !== false && quality.edit_warnings?.enabled !== false) {
         registerEditWarnings(ctx)
+      }
+      const repetitionGuard = quality.repetition_guard ?? {}
+      if (quality.enabled !== false && repetitionGuard.enabled !== false) {
+        registerRepetitionGuard(ctx, {
+          minCalls: repetitionGuard.min_calls,
+          maxDistinctInputs: repetitionGuard.max_distinct_inputs,
+          rapidIntervalMs: repetitionGuard.rapid_interval_ms,
+        })
       }
 
       if (options.discover_tools?.enabled !== false) {
