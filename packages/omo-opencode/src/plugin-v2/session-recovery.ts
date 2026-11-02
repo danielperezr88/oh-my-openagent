@@ -6,6 +6,11 @@ import { stripMediaPartsFromMessages } from "./session-recovery-strip"
 import { injectMissingToolResults, summarizeToolPairs } from "./session-recovery-tool-results"
 import { formatMessageInventory } from "./session-recovery-diagnostics"
 import {
+  loadPersistedRecoveryArming,
+  persistRecoveryArming,
+  resolveStorageDomain,
+} from "./session-recovery-persistence"
+import {
   emptyArmedRecovery,
   mergeArmedRecovery,
   resolveRecoveryAction,
@@ -46,6 +51,7 @@ function resolveEventSubscribe(domain: unknown): EventSubscribe | null {
 interface RecoveryState {
   readonly recoveringSessions: Map<string, ArmedRecovery>
   readonly handledErrorKeys: Set<string>
+  readonly storage: Plugin.Context["storage"] | null
   readonly signal: AbortSignal
 }
 
@@ -119,7 +125,12 @@ async function handleBusEvent(
   }
 
   const current = state.recoveringSessions.get(failed.sessionID) ?? emptyArmedRecovery()
-  state.recoveringSessions.set(failed.sessionID, mergeArmedRecovery(current, action.armPatch))
+  const armed = mergeArmedRecovery(current, action.armPatch)
+  state.recoveringSessions.set(failed.sessionID, armed)
+
+  if (state.storage !== null && action.armPatch.stripMedia === true) {
+    persistRecoveryArming(state.storage, failed.sessionID, armed)
+  }
 
   const unavailableToolName = errorType === "unavailable_tool" ? extractUnavailableToolName(failed.error) : null
   log(
@@ -165,10 +176,17 @@ async function runRecoveryEventLoop(
 
 export function registerSessionRecovery(ctx: Plugin.Context, options: SessionRecoveryOptions): () => void {
   const controller = new AbortController()
+  const storage = resolveStorageDomain(ctx)
   const state: RecoveryState = {
     recoveringSessions: new Map(),
     handledErrorKeys: new Set(),
+    storage,
     signal: controller.signal,
+  }
+  if (storage === null) {
+    log("[plugin-v2/session-recovery] storage domain unavailable on this host; recovery arming will not survive restarts")
+  } else {
+    void loadPersistedRecoveryArming(storage, state.recoveringSessions)
   }
   const requestTransformHandler = createRequestTransformHandler(state.recoveringSessions)
 
