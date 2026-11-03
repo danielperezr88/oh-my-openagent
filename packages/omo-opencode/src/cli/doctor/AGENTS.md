@@ -1,4 +1,4 @@
-# src/cli/doctor/ — Health Diagnostics (25 Check Files)
+# src/cli/doctor/ - Health Diagnostics (26 Check Files)
 
 **Generated:** 2026-05-15
 
@@ -24,7 +24,7 @@ bunx oh-my-opencode doctor --json       # Machine-readable output
 | **TOOLS** | `checks/tools.ts` | AST-Grep CLI + NAPI, comment-checker binary, LSP servers reachable, GitHub CLI auth, built-in MCP reachability |
 | **MODELS** | `checks/model-resolution.ts` | models.json cache exists, per-agent fallback resolution, category overrides valid, provider availability |
 
-## SUPPORTING CHECK FILES (25 total)
+## SUPPORTING CHECK FILES (26 total)
 
 ```
 checks/
@@ -39,6 +39,7 @@ checks/
 ├── tools-gh.ts                            # gh cli install + auth status
 ├── tools-lsp.ts                           # LSP server enumeration
 ├── tools-mcp.ts                           # Built-in + user MCP reachability
+├── network.ts                             # Proxy env well-formedness + registry/models.dev reachability
 ├── model-resolution.ts                    # Main Models aggregator
 ├── model-resolution-cache.ts              # models.json presence + freshness
 ├── model-resolution-config.ts             # oh-my-opencode.jsonc parse

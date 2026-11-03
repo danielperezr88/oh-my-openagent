@@ -5,6 +5,7 @@ import { checkConfig } from "./config"
 import { checkTools, gatherToolsSummary } from "./tools"
 import { checkModels } from "./model-resolution"
 import { checkTelemetry } from "./telemetry"
+import { checkNetwork } from "./network"
 import { checkTeamMode } from "./team-mode"
 import { checkTuiPluginConfig } from "./tui-plugin-config"
 import { checkCodex, gatherCodexSummary } from "./codex"
@@ -48,6 +49,11 @@ export function getAllCheckDefinitions(): CheckDefinition[] {
       id: CHECK_IDS.TELEMETRY,
       name: CHECK_NAMES[CHECK_IDS.TELEMETRY],
       check: checkTelemetry,
+    },
+    {
+      id: CHECK_IDS.NETWORK,
+      name: CHECK_NAMES[CHECK_IDS.NETWORK],
+      check: checkNetwork,
     },
     {
       id: CHECK_IDS.TEAM_MODE,

@@ -126,7 +126,7 @@ A detached worker finishes the install in the background (the `sg` download is t
 | `omo-cli` absent | The top-level `omo` command was not linked because the installed payload is old or incomplete and lacks the root CLI runtime. Current marketplace payloads ship `dist/cli/index.js` plus `dist/cli-node/index.js`, so this should not appear on a fresh marketplace install. Component CLIs still link normally. | Upgrade or reinstall the marketplace plugin, then start a new Codex session so bootstrap relinks bins. Verify with `npx lazycodex-ai doctor`; use `npx lazycodex-ai <command>` only as a temporary workaround. |
 | `sg` pending / offline | The ast-grep provisioning entry appears in the degraded list and the `ast-grep` skill cannot find `sg` yet — the first download is still running, or it failed while offline. | Start another session (bootstrap retries automatically), or install ast-grep yourself and/or set `OMO_AST_GREP_SG_PATH=/path/to/sg`. Verify with `npx lazycodex-ai doctor`. |
 | Proxy limitation | Binary downloads fail behind an HTTP(S) proxy. The logged error says it plainly: the bootstrap downloader "does not tunnel through HTTP(S) proxies in v1; the download was attempted directly." | Run one session on a direct connection, or provide `sg` via `OMO_AST_GREP_SG_PATH`/`PATH`. Verify with `npx lazycodex-ai doctor`. |
-| OpenCode Windows proxy preinstall | OpenCode starts before OMO loads, shows only default agents, or logs `fetch() proxy.url must be a non-empty string` while trying to install `oh-my-openagent@latest`. | Set `HTTP_PROXY`/`HTTPS_PROXY` for the shell that launches OpenCode, then preinstall into OpenCode's Windows config prefix: `npm install oh-my-openagent@latest --prefix "%APPDATA%\\opencode"`. Restart OpenCode and run `bunx oh-my-openagent doctor --json`. |
+| OpenCode Windows proxy preinstall | OpenCode starts before OMO loads, shows only default agents, or logs `fetch() proxy.url must be a non-empty string` while trying to install `oh-my-openagent@latest`. | Set `HTTP_PROXY`/`HTTPS_PROXY` for the shell that launches OpenCode, then preinstall into OpenCode's Windows config prefix: `npm install oh-my-openagent@latest --prefix "%APPDATA%\\opencode"`. Restart OpenCode and run `bunx oh-my-openagent doctor --json`. Corporate proxy or restricted egress? See [Enterprise / offline environments](#enterprise--offline-environments). |
 
 **Windows status.** On native Windows the marketplace bootstrap runs through a PowerShell 5.1-compatible `bootstrap.ps1`: it provisions the pinned Node LTS zip when `node` is absent, prepares Git Bash the same way the npx installer does, and writes its transcript to `ps-bootstrap.log` in the plugin data dir (degraded lines look like `degraded component=node reason=... hint=npx lazycodex-ai doctor`). Windows provisioning is shipped with static test coverage; real-device validation is still tracked separately in [code-yeongyu/lazycodex#52](https://github.com/code-yeongyu/lazycodex/issues/52). Do not treat static coverage as proof that a physical Windows install was exercised.
 
@@ -147,6 +147,85 @@ bun pm -g untrusted
 ```
 
 Do not run a blanket trust command. Trust only packages you recognize from this install path, such as `oh-my-openagent`, legacy `oh-my-opencode`, or `@code-yeongyu/comment-checker`, then rerun the supported `bunx oh-my-openagent install` or `npx lazycodex-ai doctor` check.
+
+## Enterprise / offline environments
+
+OpenCode resolves plugins from the npm registry by default. Behind a corporate proxy or an
+egress-restricted perimeter, that resolution can fail silently: OpenCode starts with only the
+default agents and never loads omo. Diagnose with:
+
+```bash
+bunx oh-my-openagent doctor --json   # read the "Network / Proxy" section
+```
+
+The failure modes below are ordered the way an enterprise install usually hits them.
+
+### 1. Load the plugin from a local build (recommended offline)
+
+A registry-resolved entry (`"oh-my-openagent"` or `"oh-my-openagent@latest"`) makes OpenCode
+install the plugin from npm at every load. A local build removes the network from the load path
+entirely and also skips update checks:
+
+```bash
+git clone <your fork or internal mirror of oh-my-openagent>
+cd oh-my-openagent
+script/agent/setup.sh   # bash - Git Bash on Windows; verifies bun/node/git, installs, builds dist/index.js
+```
+
+Then point `opencode.json` at the local build:
+
+```json
+{
+  "plugins": [
+    { "package": "file:///absolute/path/to/oh-my-openagent/dist", "options": {} }
+  ]
+}
+```
+
+### 2. Proxy and TLS environment
+
+Set these in the shell that launches OpenCode:
+
+| Variable | Notes |
+|---|---|
+| `HTTPS_PROXY` / `HTTP_PROXY` | must include the scheme: `http://proxy.corp:8080`. A bare `proxy.corp:8080` or an empty value makes Node's fetch fail with `proxy.url must be a non-empty string`. |
+| `NO_PROXY` | loopback plus internal hosts that must bypass the proxy. |
+| `NODE_EXTRA_CA_CERTS` | path to the corporate root CA PEM - required under TLS inspection, otherwise every HTTPS call fails certificate verification. |
+
+### 3. Disable telemetry
+
+Anonymous telemetry is enabled by default and posts to a public endpoint; blocked or not, most
+enterprise policies require it off:
+
+```bash
+export OMO_DISABLE_POSTHOG=1          # or OMO_SEND_ANONYMOUS_TELEMETRY=0
+```
+
+or set `"telemetry": false` in the omo config file.
+
+### 4. Offline binaries and metadata
+
+- The `sg` (ast-grep) binary downloader does not tunnel through HTTP(S) proxies in v1. Point it
+  at an internally distributed copy: `OMO_AST_GREP_SG_PATH=/path/to/sg`.
+- Model metadata comes from `models.dev`; when it is blocked, startup slows with fetch timeouts.
+  Pin model ids explicitly in the provider config and expect the doctor MODELS section to warn.
+
+### 5. Single-gateway model routing
+
+The 11 agents are designed for multi-provider coverage ("no single provider can cover
+everything" - see [agent-model-matching.md](agent-model-matching.md)). On an enterprise setup
+with one internal gateway, map every agent to it: copy
+`.opencode/oh-my-openagent.jsonc` from the repo, replace each model reference with your
+gateway's model ids, and set per-agent `model` plus `fallback_models` so every agent resolves.
+
+### 6. Verify
+
+```bash
+bunx oh-my-openagent doctor --json
+```
+
+Green means: NETWORK shows local plugin resolution (or a reachable registry), MODELS resolves
+for every agent, and no proxy-variable warnings are present.
 
 ## For LLM Agents
 
